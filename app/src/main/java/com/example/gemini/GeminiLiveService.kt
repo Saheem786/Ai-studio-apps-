@@ -153,81 +153,7 @@ class GeminiLiveService(
                         }))
                     })
                     // Declare Tools for Safe Device Actions
-                    put("tools", JSONArray().put(JSONObject().apply {
-                        val funcs = JSONArray()
-
-                        // openWhatsApp
-                        funcs.put(JSONObject().apply {
-                            put("name", "openWhatsApp")
-                            put("description", "Open WhatsApp messenger application or web link on the user's phone")
-                        })
-
-                        // openApp
-                        funcs.put(JSONObject().apply {
-                            put("name", "openApp")
-                            put("description", "Open a supported application on the user's device (WhatsApp, YouTube, Instagram, Maps, Chrome, Camera, Calculator, Settings, Clock, Spotify)")
-                            put("parameters", JSONObject().apply {
-                                put("type", "OBJECT")
-                                put("properties", JSONObject().apply {
-                                    put("appName", JSONObject().apply {
-                                        put("type", "STRING")
-                                        put("description", "Name of the app to open")
-                                    })
-                                })
-                                put("required", JSONArray().put("appName"))
-                            })
-                        })
-
-                        // openWebsite
-                        funcs.put(JSONObject().apply {
-                            put("name", "openWebsite")
-                            put("description", "Open a website in the device's web browser")
-                            put("parameters", JSONObject().apply {
-                                put("type", "OBJECT")
-                                put("properties", JSONObject().apply {
-                                    put("url", JSONObject().apply {
-                                        put("type", "STRING")
-                                        put("description", "The website URL to open (must start with https://)")
-                                    })
-                                })
-                                put("required", JSONArray().put("url"))
-                            })
-                        })
-
-                        // makeCall
-                        funcs.put(JSONObject().apply {
-                            put("name", "makeCall")
-                            put("description", "Open phone dialer or initiate a call to a specific phone number")
-                            put("parameters", JSONObject().apply {
-                                put("type", "OBJECT")
-                                put("properties", JSONObject().apply {
-                                    put("phoneNumber", JSONObject().apply {
-                                        put("type", "STRING")
-                                        put("description", "The phone number to call")
-                                    })
-                                })
-                                put("required", JSONArray().put("phoneNumber"))
-                            })
-                        })
-
-                        // callContact
-                        funcs.put(JSONObject().apply {
-                            put("name", "callContact")
-                            put("description", "Search device contacts by contact name (e.g. Mom, Mummy, Dad, Rahul) and initiate a phone call or dialer")
-                            put("parameters", JSONObject().apply {
-                                put("type", "OBJECT")
-                                put("properties", JSONObject().apply {
-                                    put("contactName", JSONObject().apply {
-                                        put("type", "STRING")
-                                        put("description", "The name of the contact to call")
-                                    })
-                                })
-                                put("required", JSONArray().put("contactName"))
-                            })
-                        })
-
-                        put("functionDeclarations", funcs)
-                    }))
+                    put("tools", createToolsDeclarationsJson())
                 }
                 put("setup", setupObj)
             }
@@ -435,6 +361,7 @@ class GeminiLiveService(
                         })
                     })
                 })
+                put("tools", createToolsDeclarationsJson())
             }
 
             val request = Request.Builder()
@@ -458,6 +385,24 @@ class GeminiLiveService(
             if (parts != null) {
                 for (i in 0 until parts.length()) {
                     val p = parts.getJSONObject(i)
+                    if (p.has("functionCall")) {
+                        val fc = p.getJSONObject("functionCall")
+                        val name = fc.getString("name")
+                        val callId = fc.optString("id", java.util.UUID.randomUUID().toString())
+                        val argsObj = fc.optJSONObject("args")
+                        val argsMap = mutableMapOf<String, Any?>()
+                        if (argsObj != null) {
+                            val keys = argsObj.keys()
+                            while (keys.hasNext()) {
+                                val k = keys.next()
+                                argsMap[k] = argsObj.get(k)
+                            }
+                        }
+                        onDiagnosticLog("REST Fallback: Function call detected: $name with args: $argsMap")
+                        withContext(Dispatchers.Main) {
+                            onToolCallReceived(name, callId, argsMap)
+                        }
+                    }
                     if (p.has("inlineData")) {
                         val inline = p.getJSONObject("inlineData")
                         val mime = inline.optString("mimeType", "audio/pcm;rate=24000")
@@ -476,6 +421,84 @@ class GeminiLiveService(
             onDiagnosticLog("REST Fallback error: ${e.message}")
             false
         }
+    }
+
+    private fun createToolsDeclarationsJson(): JSONArray {
+        return JSONArray().put(JSONObject().apply {
+            val funcs = JSONArray()
+
+            // openWhatsApp
+            funcs.put(JSONObject().apply {
+                put("name", "openWhatsApp")
+                put("description", "Open WhatsApp messenger application or web link on the user's phone")
+            })
+
+            // openApp
+            funcs.put(JSONObject().apply {
+                put("name", "openApp")
+                put("description", "Open a supported application on the user's device (WhatsApp, YouTube, Instagram, Maps, Chrome, Camera, Calculator, Settings, Clock, Spotify)")
+                put("parameters", JSONObject().apply {
+                    put("type", "OBJECT")
+                    put("properties", JSONObject().apply {
+                        put("appName", JSONObject().apply {
+                            put("type", "STRING")
+                            put("description", "Name of the app to open (e.g. YouTube, WhatsApp, Instagram, Chrome, Maps, Spotify, Calculator, Camera)")
+                        })
+                    })
+                    put("required", JSONArray().put("appName"))
+                })
+            })
+
+            // openWebsite
+            funcs.put(JSONObject().apply {
+                put("name", "openWebsite")
+                put("description", "Open a website in the device's web browser")
+                put("parameters", JSONObject().apply {
+                    put("type", "OBJECT")
+                    put("properties", JSONObject().apply {
+                        put("url", JSONObject().apply {
+                            put("type", "STRING")
+                            put("description", "The website URL to open (must start with https://)")
+                        })
+                    })
+                    put("required", JSONArray().put("url"))
+                })
+            })
+
+            // makeCall
+            funcs.put(JSONObject().apply {
+                put("name", "makeCall")
+                put("description", "Open phone dialer or initiate a call to a specific phone number")
+                put("parameters", JSONObject().apply {
+                    put("type", "OBJECT")
+                    put("properties", JSONObject().apply {
+                        put("phoneNumber", JSONObject().apply {
+                            put("type", "STRING")
+                            put("description", "The phone number to call")
+                        })
+                    })
+                    put("required", JSONArray().put("phoneNumber"))
+                })
+            })
+
+            // callContact
+            funcs.put(JSONObject().apply {
+                put("name", "callContact")
+                put("description", "Search device contacts by contact name (e.g. Mom, Mummy, Dad, Rahul) and initiate a phone call or dialer")
+                put("parameters", JSONObject().apply {
+                    put("type", "OBJECT")
+                    put("properties", JSONObject().apply {
+                        put("contactName", JSONObject().apply {
+                            put("type", "STRING")
+                            put("description", "The name of the contact to call")
+                        })
+                    })
+                    put("required", JSONArray().put("contactName"))
+                })
+            })
+
+            put("functionDeclarations", funcs)
+        })
     }
 
     /**
@@ -500,6 +523,7 @@ class GeminiLiveService(
                         put("text", ArushiPersonality.SYSTEM_INSTRUCTION.trim())
                     }))
                 })
+                put("tools", createToolsDeclarationsJson())
             }
 
             val request = Request.Builder()
@@ -526,6 +550,43 @@ class GeminiLiveService(
             if (parts != null) {
                 for (i in 0 until parts.length()) {
                     val p = parts.getJSONObject(i)
+                    if (p.has("functionCall")) {
+                        val fc = p.getJSONObject("functionCall")
+                        val name = fc.getString("name")
+                        val callId = fc.optString("id", java.util.UUID.randomUUID().toString())
+                        val argsObj = fc.optJSONObject("args")
+                        val argsMap = mutableMapOf<String, Any?>()
+                        if (argsObj != null) {
+                            val keys = argsObj.keys()
+                            while (keys.hasNext()) {
+                                val k = keys.next()
+                                argsMap[k] = argsObj.get(k)
+                            }
+                        }
+                        onDiagnosticLog("Chat: Function call detected: $name with args: $argsMap")
+                        withContext(Dispatchers.Main) {
+                            onToolCallReceived(name, callId, argsMap)
+                        }
+                        if (responseText.isBlank()) {
+                            responseText = when (name) {
+                                "openApp" -> {
+                                    val targetApp = argsMap["appName"]?.toString() ?: "App"
+                                    "$targetApp open kar diya hai! 🚀"
+                                }
+                                "openWhatsApp" -> "WhatsApp open kar diya hai! 💬"
+                                "openWebsite" -> "Website browser mein open kar diya hai! 🌐"
+                                "callContact" -> {
+                                    val contact = argsMap["contactName"]?.toString() ?: "Contact"
+                                    "$contact ko call mila diya hai. 📞"
+                                }
+                                "makeCall" -> {
+                                    val number = argsMap["phoneNumber"]?.toString() ?: "Number"
+                                    "$number par call mila diya hai. 📞"
+                                }
+                                else -> "Action $name execute kar diya hai."
+                            }
+                        }
+                    }
                     if (p.has("text")) {
                         responseText += p.getString("text")
                     }

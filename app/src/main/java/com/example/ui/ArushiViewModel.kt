@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.BuildConfig
 import com.example.audio.AudioTrackPlayer
 import com.example.audio.MicrophoneRecorder
+import com.example.audio.TextToSpeechEngine
 import com.example.data.AppDatabase
 import com.example.data.ChatRepository
 import com.example.device.ContactItem
@@ -68,6 +69,7 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
     private val chatRepository = ChatRepository(chatDatabase.chatMessageDao())
 
     private var audioPlayer: AudioTrackPlayer? = null
+    private var ttsEngine: TextToSpeechEngine? = null
     private var micRecorder: MicrophoneRecorder? = null
     private var geminiService: GeminiLiveService? = null
 
@@ -147,6 +149,28 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
 
         audioPlayer?.startPlaybackLoop(viewModelScope)
 
+        ttsEngine = TextToSpeechEngine(
+            context = getApplication(),
+            scope = viewModelScope,
+            onSpeechStarted = {
+                _uiState.update { it.copy(state = AssistantState.SPEAKING) }
+                addLog("TTS speech started - UI state changed to SPEAKING")
+            },
+            onSpeechEnded = {
+                val nextState = if (_uiState.value.isMicActive) AssistantState.LISTENING else AssistantState.IDLE
+                _uiState.update { it.copy(state = nextState, amplitude = 0f) }
+                addLog("TTS speech ended - UI state returned to $nextState")
+            },
+            onAmplitudeChanged = { amp ->
+                if (_uiState.value.state == AssistantState.SPEAKING) {
+                    _uiState.update { it.copy(amplitude = amp) }
+                }
+            },
+            onDiagnosticLog = { logMsg ->
+                addLog(logMsg)
+            }
+        )
+
         micRecorder = MicrophoneRecorder(
             onAudioChunk = { base64Data, rawBytes ->
                 geminiService?.sendAudioChunk(base64Data)
@@ -160,6 +184,7 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
                 if (_uiState.value.state == AssistantState.SPEAKING) {
                     addLog("User interrupted speech detected via microphone")
                     audioPlayer?.interrupt()
+                    ttsEngine?.stop()
                     _uiState.update { it.copy(state = AssistantState.LISTENING) }
                 }
             },
@@ -216,6 +241,7 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
             onInterrupted = {
                 addLog("Gemini reported interruption")
                 audioPlayer?.interrupt()
+                ttsEngine?.stop()
             },
             onError = { errMsg ->
                 addLog("Gemini session error: $errMsg")
@@ -449,6 +475,7 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
         addLog("User stopped session")
         micRecorder?.stop()
         audioPlayer?.interrupt()
+        ttsEngine?.stop()
         geminiService?.disconnect()
         _uiState.update {
             it.copy(
@@ -461,11 +488,12 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * Speaker Diagnostic Test: plays 440Hz sine tone
+     * Speaker Diagnostic Test: plays 440Hz sine tone and tests Text-to-Speech output
      */
     fun testSpeaker() {
-        addLog("Running Speaker Diagnostic Test (440Hz Tone)...")
+        addLog("Running Speaker & TextToSpeech Diagnostic Test...")
         audioPlayer?.testSpeakerTone(viewModelScope)
+        ttsEngine?.speak("Sam voice assistant speaker and Text to Speech test successful.")
     }
 
     /**
@@ -473,6 +501,118 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
      */
     fun sendQuickPrompt(promptText: String) {
         addLog("Quick action triggered: '$promptText'")
+        val clean = promptText.replace(Regex("^[\\p{So}\\p{Sk}\\p{Sm}\\p{Sc}\\p{Punct}\\s]+"), "").trim().lowercase()
+
+        // 1. YouTube Quick Action
+        if (clean.contains("youtube")) {
+            val userMsg = ChatMessage(sender = MessageSender.USER, text = promptText)
+            val result = deviceActionManager.openApp("YouTube")
+            val msg = if (result is DeviceActionResult.Success) result.message else (result as? DeviceActionResult.Failure)?.error ?: "Opened YouTube"
+            val actionMsg = ChatMessage(
+                sender = MessageSender.ASSISTANT,
+                text = "YouTube open kar diya hai! ▶️",
+                isAction = true,
+                actionName = "openApp",
+                actionDetail = msg
+            )
+            viewModelScope.launch {
+                chatRepository.saveMessage(userMsg)
+                chatRepository.saveMessage(actionMsg)
+            }
+            ttsEngine?.speak("YouTube open kar diya hai")
+            _uiState.update { it.copy(actionBanner = "YouTube open kar diya hai! ▶️") }
+            return
+        }
+
+        // 2. WhatsApp Quick Action
+        if (clean.contains("whatsapp")) {
+            val userMsg = ChatMessage(sender = MessageSender.USER, text = promptText)
+            val result = deviceActionManager.openWhatsApp()
+            val msg = if (result is DeviceActionResult.Success) result.message else (result as? DeviceActionResult.Failure)?.error ?: "Opened WhatsApp"
+            val actionMsg = ChatMessage(
+                sender = MessageSender.ASSISTANT,
+                text = "WhatsApp open kar diya hai! 💬",
+                isAction = true,
+                actionName = "openWhatsApp",
+                actionDetail = msg
+            )
+            viewModelScope.launch {
+                chatRepository.saveMessage(userMsg)
+                chatRepository.saveMessage(actionMsg)
+            }
+            ttsEngine?.speak("WhatsApp open kar diya hai")
+            _uiState.update { it.copy(actionBanner = "WhatsApp open kar diya hai! 💬") }
+            return
+        }
+
+        // 3. Google / Website Quick Action
+        if (clean.contains("google")) {
+            val userMsg = ChatMessage(sender = MessageSender.USER, text = promptText)
+            val result = deviceActionManager.openWebsite("https://www.google.com")
+            val msg = if (result is DeviceActionResult.Success) result.message else (result as? DeviceActionResult.Failure)?.error ?: "Opened Google"
+            val actionMsg = ChatMessage(
+                sender = MessageSender.ASSISTANT,
+                text = "Google browser mein open kar diya hai! 🌐",
+                isAction = true,
+                actionName = "openWebsite",
+                actionDetail = msg
+            )
+            viewModelScope.launch {
+                chatRepository.saveMessage(userMsg)
+                chatRepository.saveMessage(actionMsg)
+            }
+            ttsEngine?.speak("Google browser mein open kar diya hai")
+            _uiState.update { it.copy(actionBanner = "Google browser mein open kar diya hai! 🌐") }
+            return
+        }
+
+        // 4. Call Mom Quick Action
+        if (clean.contains("call mom")) {
+            val userMsg = ChatMessage(sender = MessageSender.USER, text = promptText)
+            val result = deviceActionManager.callContact("Mom")
+            when (result) {
+                is DeviceActionResult.ContactFound -> {
+                    val actionMsg = ChatMessage(
+                        sender = MessageSender.ASSISTANT,
+                        text = "${result.contact.name} (${result.contact.phoneNumber}) ko call mila diya hai. 📞",
+                        isAction = true,
+                        actionName = "callContact",
+                        actionDetail = result.message
+                    )
+                    viewModelScope.launch {
+                        chatRepository.saveMessage(userMsg)
+                        chatRepository.saveMessage(actionMsg)
+                    }
+                    ttsEngine?.speak("${result.contact.name} ko call mila diya hai")
+                    _uiState.update { it.copy(actionBanner = "Calling ${result.contact.name}...") }
+                    return
+                }
+                is DeviceActionResult.MultipleContactsFound -> {
+                    viewModelScope.launch {
+                        chatRepository.saveMessage(userMsg)
+                    }
+                    _uiState.update { it.copy(multipleContacts = result.contacts) }
+                    return
+                }
+                else -> {
+                    deviceActionManager.makeCall("")
+                    val actionMsg = ChatMessage(
+                        sender = MessageSender.ASSISTANT,
+                        text = "Phone dialer open kar diya hai. 📞",
+                        isAction = true,
+                        actionName = "makeCall",
+                        actionDetail = "Opened dialer"
+                    )
+                    viewModelScope.launch {
+                        chatRepository.saveMessage(userMsg)
+                        chatRepository.saveMessage(actionMsg)
+                    }
+                    ttsEngine?.speak("Phone dialer open kar diya hai")
+                    return
+                }
+            }
+        }
+
         if (!_uiState.value.isMicActive) {
             startSession()
         }
@@ -509,6 +649,7 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             chatRepository.saveMessage(actionMsg)
         }
+        ttsEngine?.speak("${contact.name} ko call mila diya hai")
         geminiService?.sendUserText("I want to call ${contact.name}")
     }
 
@@ -579,9 +720,43 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
             viewModelScope.launch {
                 chatRepository.saveMessage(actionMsg)
             }
+            ttsEngine?.speak("WhatsApp open kar diya hai")
             _uiState.update { it.copy(isSendingChat = false) }
             return
-        } else if (lower.startsWith("call ") || lower.contains("ko call karo") || lower.contains("ko phone lagao")) {
+        }
+
+        // Check for other supported apps (YouTube, Instagram, Chrome, Maps, Spotify, Camera, Calculator)
+        val supportedApps = listOf(
+            "youtube" to "YouTube",
+            "instagram" to "Instagram",
+            "chrome" to "Google Chrome",
+            "browser" to "Google Chrome",
+            "maps" to "Google Maps",
+            "spotify" to "Spotify",
+            "camera" to "Camera",
+            "calculator" to "Calculator"
+        )
+        for ((appKey, appDisplayName) in supportedApps) {
+            if (lower.contains(appKey) && (lower.contains("open") || lower.contains("kholo") || lower.contains("chalao") || lower.contains("start") || lower.contains("launch") || lower.trim() == appKey || lower.trim() == "open $appKey")) {
+                val result = deviceActionManager.openApp(appDisplayName)
+                val msg = if (result is DeviceActionResult.Success) result.message else (result as? DeviceActionResult.Failure)?.error ?: "Attempted to open $appDisplayName"
+                val actionMsg = ChatMessage(
+                    sender = MessageSender.ASSISTANT,
+                    text = "$appDisplayName open kar diya hai! 🚀",
+                    isAction = true,
+                    actionName = "openApp",
+                    actionDetail = msg
+                )
+                viewModelScope.launch {
+                    chatRepository.saveMessage(actionMsg)
+                }
+                ttsEngine?.speak("$appDisplayName open kar diya hai")
+                _uiState.update { it.copy(isSendingChat = false) }
+                return
+            }
+        }
+
+        if (lower.startsWith("call ") || lower.contains("ko call karo") || lower.contains("ko phone lagao")) {
             val contactQuery = text.replace(Regex("(?i)^(call|call to|phone|phone lagao)\\s*"), "")
                 .replace(Regex("(?i)\\s*(ko call karo|ko phone lagao|ko call lagao)$"), "")
                 .trim()
@@ -599,6 +774,7 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
                         viewModelScope.launch {
                             chatRepository.saveMessage(actionMsg)
                         }
+                        ttsEngine?.speak("${result.contact.name} ko call mila diya hai")
                         _uiState.update { it.copy(isSendingChat = false) }
                         return
                     }
@@ -642,16 +818,18 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
 
                 if (!audioBase64.isNullOrEmpty()) {
                     audioPlayer?.enqueueChunk(audioBase64)
+                } else {
+                    // Output voice response via Android TextToSpeech engine
+                    ttsEngine?.speak(reply)
                 }
             }
         }
     }
 
     fun speakMessage(text: String) {
-        viewModelScope.launch {
-            addLog("Speaking message: '${text.take(40)}...'")
-            geminiService?.generateRestAudioFallback(text)
-        }
+        addLog("Speaking message via Android TextToSpeech: '${text.take(40)}...'")
+        audioPlayer?.interrupt()
+        ttsEngine?.speak(text)
     }
 
     fun clearChatHistory() {
@@ -672,6 +850,7 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
         super.onCleared()
         micRecorder?.stop()
         audioPlayer?.release()
+        ttsEngine?.release()
         geminiService?.disconnect()
     }
 }

@@ -14,11 +14,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -58,6 +60,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -259,14 +262,14 @@ fun SpeakerDiagnosticBar(
                 )
                 Column {
                     Text(
-                        text = "Speaker Diagnostic",
+                        text = "Speaker & TTS Diagnostic",
                         style = MaterialTheme.typography.bodyMedium.copy(
                             fontWeight = FontWeight.SemiBold,
                             color = ArushiTextPrimary
                         )
                     )
                     Text(
-                        text = "Verifies 440Hz output through device speaker",
+                        text = "Verifies speaker audio & Android Text-to-Speech output",
                         style = MaterialTheme.typography.bodySmall.copy(
                             color = ArushiTextMuted,
                             fontSize = 11.sp
@@ -743,50 +746,175 @@ fun ChatScreenView(
         }
     }
 
-    Column(
+    Scaffold(
         modifier = modifier
             .fillMaxSize()
-            .imePadding()
-    ) {
-        // Chat Header with Clear button
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Conversation with Sam",
-                style = MaterialTheme.typography.bodySmall.copy(
-                    color = ArushiTextMuted,
-                    fontWeight = FontWeight.Medium
-                )
-            )
-            TextButton(
-                onClick = onClearChat,
-                modifier = Modifier.height(32.dp)
+            .imePadding(), // Apply IME padding ONLY ONCE here at the Scaffold/Root level
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        containerColor = Color.Transparent,
+        topBar = {
+            // Chat Header with Clear button
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Default.DeleteOutline,
-                    contentDescription = "Clear",
-                    tint = ArushiTextMuted,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = "Clear",
-                    style = MaterialTheme.typography.bodySmall.copy(color = ArushiTextMuted)
+                    text = "Conversation with Sam",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        color = ArushiTextMuted,
+                        fontWeight = FontWeight.Medium
+                    )
                 )
+                TextButton(
+                    onClick = onClearChat,
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.DeleteOutline,
+                        contentDescription = "Clear",
+                        tint = ArushiTextMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Clear",
+                        style = MaterialTheme.typography.bodySmall.copy(color = ArushiTextMuted)
+                    )
+                }
+            }
+        },
+        bottomBar = {
+            // Bottom Input Bar container
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding() // Handles Android navigation bar only, DO NOT put another .imePadding() here!
+            ) {
+                // Quick prompt chips
+                val chatSuggestions = listOf(
+                    "💬 WhatsApp kholo",
+                    "📞 Mom ko call karo",
+                    "Ek joke sunao",
+                    "Mausam kaisa hai?",
+                    "▶️ Open YouTube"
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    chatSuggestions.forEach { suggestion ->
+                        Surface(
+                            color = ArushiSurfaceElevated,
+                            shape = RoundedCornerShape(16.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, ArushiSurfaceBorder),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .clickable { onSendMessage(suggestion) }
+                        ) {
+                            Text(
+                                text = suggestion,
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    color = ArushiTextSecondary,
+                                    fontSize = 11.sp
+                                ),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Bottom Message Input Bar
+                Surface(
+                    color = ArushiSurface,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, ArushiSurfaceBorder),
+                    shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Switch to voice icon button
+                        IconButton(
+                            onClick = onSwitchToVoice,
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(CircleShape)
+                                .background(ArushiSurfaceElevated)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Mic,
+                                contentDescription = "Voice mode",
+                                tint = ArushiCyan,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        // Text Field
+                        OutlinedTextField(
+                            value = inputText,
+                            onValueChange = onInputChanged,
+                            placeholder = {
+                                Text(
+                                    text = "Message Sam...",
+                                    color = ArushiTextMuted,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            },
+                            maxLines = 4,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                            keyboardActions = KeyboardActions(onSend = { onSendMessage(inputText) }),
+                            shape = RoundedCornerShape(24.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = ArushiTextPrimary,
+                                unfocusedTextColor = ArushiTextPrimary,
+                                focusedBorderColor = ArushiPurplePrimary,
+                                unfocusedBorderColor = ArushiSurfaceBorder,
+                                focusedContainerColor = ArushiSurfaceElevated,
+                                unfocusedContainerColor = ArushiSurfaceElevated
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("chat_input_field")
+                        )
+
+                        // Send Button
+                        IconButton(
+                            onClick = { onSendMessage(inputText) },
+                            enabled = inputText.isNotBlank(),
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(if (inputText.isNotBlank()) ArushiPurplePrimary else ArushiSurfaceElevated)
+                                .testTag("chat_send_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Send,
+                                contentDescription = "Send",
+                                tint = if (inputText.isNotBlank()) ArushiDarkBg else ArushiTextMuted,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
-
+    ) { chatInnerPadding ->
         // Messages list
         LazyColumn(
             state = listState,
             modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
+                .fillMaxSize()
+                .padding(chatInnerPadding)
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -912,120 +1040,6 @@ fun ChatScreenView(
                             )
                         )
                     }
-                }
-            }
-        }
-
-        // Quick prompt chips
-        val chatSuggestions = listOf(
-            "💬 WhatsApp kholo",
-            "📞 Mom ko call karo",
-            "Ek joke sunao",
-            "Mausam kaisa hai?",
-            "▶️ Open YouTube"
-        )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            chatSuggestions.forEach { suggestion ->
-                Surface(
-                    color = ArushiSurfaceElevated,
-                    shape = RoundedCornerShape(16.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, ArushiSurfaceBorder),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(16.dp))
-                        .clickable { onSendMessage(suggestion) }
-                ) {
-                    Text(
-                        text = suggestion,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = ArushiTextSecondary,
-                            fontSize = 11.sp
-                        ),
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                    )
-                }
-            }
-        }
-
-        // Bottom Message Input Bar
-        Surface(
-            color = ArushiSurface,
-            border = androidx.compose.foundation.BorderStroke(1.dp, ArushiSurfaceBorder),
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Switch to voice icon button
-                IconButton(
-                    onClick = onSwitchToVoice,
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(ArushiSurfaceElevated)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Mic,
-                        contentDescription = "Voice mode",
-                        tint = ArushiCyan,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                // Text Field
-                OutlinedTextField(
-                    value = inputText,
-                    onValueChange = onInputChanged,
-                    placeholder = {
-                        Text(
-                            text = "Message Sam...",
-                            color = ArushiTextMuted,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    },
-                    maxLines = 4,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = { onSendMessage(inputText) }),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = ArushiTextPrimary,
-                        unfocusedTextColor = ArushiTextPrimary,
-                        focusedBorderColor = ArushiPurplePrimary,
-                        unfocusedBorderColor = ArushiSurfaceBorder,
-                        focusedContainerColor = ArushiSurfaceElevated,
-                        unfocusedContainerColor = ArushiSurfaceElevated
-                    ),
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("chat_input_field")
-                )
-
-                // Send Button
-                IconButton(
-                    onClick = { onSendMessage(inputText) },
-                    enabled = inputText.isNotBlank(),
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(if (inputText.isNotBlank()) ArushiPurplePrimary else ArushiSurfaceElevated)
-                        .testTag("chat_send_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Send",
-                        tint = if (inputText.isNotBlank()) ArushiDarkBg else ArushiTextMuted,
-                        modifier = Modifier.size(20.dp)
-                    )
                 }
             }
         }

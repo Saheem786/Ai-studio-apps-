@@ -34,98 +34,94 @@ class DeviceActionManager(private val context: Context) {
     }
 
     /**
-     * Open WhatsApp directly or via deep link
+     * Foolproof application opener with native package launch and web/URI fallback
      */
-    fun openWhatsApp(): DeviceActionResult {
-        Log.d(TAG, "Executing openWhatsApp action")
-        val pm = context.packageManager
-        val packages = listOf("com.whatsapp", "com.whatsapp.w4b")
+    fun launchApp(appName: String): Boolean {
+        val cleanName = appName.trim().lowercase()
+            .replace(Regex("(?i)^(open|launch|start|kholo|chalao)\\s*"), "")
+            .replace(Regex("(?i)\\s*(kholo|chalao|open karo|launch karo)$"), "")
+            .trim()
 
-        for (pkg in packages) {
-            val launchIntent = pm.getLaunchIntentForPackage(pkg)
+        val packageMap = mapOf(
+            "youtube" to "com.google.android.youtube",
+            "whatsapp" to "com.whatsapp",
+            "instagram" to "com.instagram.android",
+            "chrome" to "com.android.chrome",
+            "browser" to "com.android.chrome",
+            "google" to "com.android.chrome",
+            "maps" to "com.google.android.apps.maps",
+            "google maps" to "com.google.android.apps.maps",
+            "spotify" to "com.spotify.music",
+            "calculator" to "com.google.android.calculator",
+            "camera" to "android.media.action.IMAGE_CAPTURE"
+        )
+
+        val matchedKey = packageMap.keys.firstOrNull { cleanName.contains(it) || it.contains(cleanName) } ?: cleanName
+        val pkg = packageMap[matchedKey]
+
+        return try {
+            if (pkg == "android.media.action.IMAGE_CAPTURE") {
+                val camIntent = Intent("android.media.action.IMAGE_CAPTURE").apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(camIntent)
+                return true
+            }
+
+            val launchIntent = pkg?.let { context.packageManager.getLaunchIntentForPackage(it) }
             if (launchIntent != null) {
                 launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                return try {
-                    context.startActivity(launchIntent)
-                    Log.i(TAG, "WhatsApp opened successfully via package $pkg")
-                    DeviceActionResult.Success("openWhatsApp", "WhatsApp opened successfully")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to launch WhatsApp package $pkg", e)
-                    DeviceActionResult.Failure("openWhatsApp", "Could not launch WhatsApp: ${e.message}")
+                context.startActivity(launchIntent)
+                true
+            } else {
+                // Web/URI Fallback
+                val fallbackUri = when (matchedKey) {
+                    "youtube" -> Uri.parse("https://www.youtube.com")
+                    "whatsapp" -> Uri.parse("whatsapp://send")
+                    "instagram" -> Uri.parse("https://www.instagram.com")
+                    "maps", "google maps" -> Uri.parse("https://maps.google.com")
+                    "spotify" -> Uri.parse("https://open.spotify.com")
+                    "chrome", "browser", "google" -> Uri.parse("https://www.google.com")
+                    else -> Uri.parse("https://www.google.com/search?q=$cleanName")
                 }
+                val intent = Intent(Intent.ACTION_VIEW, fallbackUri).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                true
             }
-        }
-
-        // Fallback: WhatsApp URL scheme or web
-        return try {
-            val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/")).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(webIntent)
-            Log.i(TAG, "WhatsApp opened via web deep link")
-            DeviceActionResult.Success("openWhatsApp", "WhatsApp opened via web link")
         } catch (e: Exception) {
-            Log.w(TAG, "WhatsApp is not installed and fallback failed", e)
-            DeviceActionResult.Failure("openWhatsApp", "WhatsApp is not installed on this device.")
+            Log.e(TAG, "launchApp failed for $appName", e)
+            false
         }
     }
 
     /**
-     * Safely open an application from the allowlist
+     * Open WhatsApp directly or via deep link
+     */
+    fun openWhatsApp(): DeviceActionResult {
+        Log.d(TAG, "Executing openWhatsApp action")
+        val success = launchApp("whatsapp")
+        return if (success) {
+            Log.i(TAG, "WhatsApp opened successfully")
+            DeviceActionResult.Success("openWhatsApp", "WhatsApp opened successfully")
+        } else {
+            DeviceActionResult.Failure("openWhatsApp", "Could not open WhatsApp")
+        }
+    }
+
+    /**
+     * Safely open an application with package launch and fallback
      */
     fun openApp(rawAppName: String): DeviceActionResult {
-        val appName = rawAppName.trim().lowercase()
-        Log.d(TAG, "Executing openApp for '$appName'")
-
-        if (appName.contains("whatsapp")) {
-            return openWhatsApp()
+        Log.d(TAG, "Executing openApp for '$rawAppName'")
+        val success = launchApp(rawAppName)
+        return if (success) {
+            Log.i(TAG, "Opened $rawAppName successfully")
+            DeviceActionResult.Success("openApp", "Opened $rawAppName successfully")
+        } else {
+            DeviceActionResult.Failure("openApp", "Could not open $rawAppName")
         }
-
-        val candidates = ALLOWED_APPS.entries.firstOrNull { (key, _) ->
-            appName.contains(key) || key.contains(appName)
-        }?.value
-
-        if (candidates == null) {
-            Log.w(TAG, "App '$appName' is not in the security allowlist")
-            return DeviceActionResult.Failure(
-                "openApp",
-                "App '$rawAppName' is not in the supported applications list. Supported: WhatsApp, YouTube, Instagram, Maps, Chrome, Camera, Calculator, Settings, Clock, Spotify."
-            )
-        }
-
-        val pm = context.packageManager
-        for (candidate in candidates) {
-            // Check if it's a generic action intent
-            if (candidate.startsWith("android.")) {
-                try {
-                    val actionIntent = Intent(candidate).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    if (actionIntent.resolveActivity(pm) != null) {
-                        context.startActivity(actionIntent)
-                        return DeviceActionResult.Success("openApp", "Opened $rawAppName")
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to trigger action intent $candidate", e)
-                }
-            }
-
-            // Check package launch intent
-            val launchIntent = pm.getLaunchIntentForPackage(candidate)
-            if (launchIntent != null) {
-                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                return try {
-                    context.startActivity(launchIntent)
-                    Log.i(TAG, "Opened app $rawAppName successfully ($candidate)")
-                    DeviceActionResult.Success("openApp", "Opened $rawAppName successfully")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error opening $rawAppName", e)
-                    DeviceActionResult.Failure("openApp", "Failed to start $rawAppName: ${e.message}")
-                }
-            }
-        }
-
-        return DeviceActionResult.Failure("openApp", "$rawAppName is not installed on this device.")
     }
 
     /**

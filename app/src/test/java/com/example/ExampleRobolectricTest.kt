@@ -50,4 +50,28 @@ class ExampleRobolectricTest {
         assertEquals(0, repo.getMessageCount())
         db.close()
     }
+
+    @Test
+    fun `verify text to speech engine initialization and lifecycle`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val engine = com.example.audio.TextToSpeechEngine(
+            context = context,
+            scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main)
+        )
+        assertNotNull(engine)
+        engine.speak("Hello from Sam AI")
+        engine.stop()
+        engine.release()
+    }
+
+    @Test
+    fun `verify device action manager app launcher and fallback`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val manager = com.example.device.DeviceActionManager(context)
+        val youtubeSuccess = manager.launchApp("YouTube")
+        org.junit.Assert.assertTrue(youtubeSuccess)
+
+        val whatsappSuccess = manager.launchApp("WhatsApp")
+        org.junit.Assert.assertTrue(whatsappSuccess)
+    }
 }
