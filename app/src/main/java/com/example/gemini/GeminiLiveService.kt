@@ -405,7 +405,7 @@ class GeminiLiveService(
 
         onDiagnosticLog("REST Fallback: Requesting native audio response for '$prompt'...")
         try {
-            val url = "$REST_BASE_URL/models/gemini-2.5-flash-native-audio-preview-12-2025:generateContent?key=$currentApiKey"
+            val url = "$REST_BASE_URL/models/gemini-3.8-flash:generateContent?key=$currentApiKey"
             val bodyJson = JSONObject().apply {
                 put("contents", JSONArray().put(JSONObject().apply {
                     put("parts", JSONArray().put(JSONObject().apply {
