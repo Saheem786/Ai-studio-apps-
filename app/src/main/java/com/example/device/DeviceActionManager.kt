@@ -166,14 +166,32 @@ class DeviceActionManager(private val context: Context) {
         }
 
         return try {
-            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$cleanNumber")).apply {
+            val hasCallPermission = ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.CALL_PHONE
+            ) == PackageManager.PERMISSION_GRANTED
+
+            val action = if (hasCallPermission) Intent.ACTION_CALL else Intent.ACTION_DIAL
+            val intent = Intent(action, Uri.parse("tel:$cleanNumber")).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)
-            Log.i(TAG, "Dialer opened for $cleanNumber")
-            DeviceActionResult.Success("makeCall", "Opening dialer for $cleanNumber")
+            val actionMsg = if (hasCallPermission) "Calling $cleanNumber" else "Opening dialer for $cleanNumber"
+            Log.i(TAG, actionMsg)
+            DeviceActionResult.Success("makeCall", actionMsg)
+        } catch (e: SecurityException) {
+            Log.w(TAG, "CALL_PHONE permission denied at runtime, falling back to ACTION_DIAL", e)
+            try {
+                val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$cleanNumber")).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(dialIntent)
+                DeviceActionResult.Success("makeCall", "Opening dialer for $cleanNumber")
+            } catch (ex: Exception) {
+                DeviceActionResult.Failure("makeCall", "Unable to open dialer: ${ex.message}")
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to launch dialer", e)
+            Log.e(TAG, "Failed to launch call/dialer", e)
             DeviceActionResult.Failure("makeCall", "Could not start call: ${e.message}")
         }
     }

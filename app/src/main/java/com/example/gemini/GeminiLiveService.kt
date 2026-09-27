@@ -56,14 +56,22 @@ class GeminiLiveService(
     private var activeModel = ArushiPersonality.MODEL_LIVE_PRIMARY
     private var currentApiKey: String = ""
 
-    fun connect(apiKey: String, model: String = ArushiPersonality.MODEL_LIVE_PRIMARY) {
-        if (apiKey.isBlank()) {
+    fun setApiKey(apiKey: String) {
+        currentApiKey = apiKey.trim()
+        onDiagnosticLog("API key set in GeminiLiveService (${if (currentApiKey.isNotBlank()) "Configured" else "Empty"})")
+    }
+
+    fun getApiKey(): String = currentApiKey
+
+    fun connect(apiKey: String = currentApiKey, model: String = ArushiPersonality.MODEL_LIVE_PRIMARY) {
+        val resolvedKey = apiKey.trim().ifEmpty { currentApiKey.trim() }
+        if (resolvedKey.isBlank()) {
             onError("Gemini API key is missing. Please configure it in Secrets or in Settings.")
             onDiagnosticLog("Error: Missing Gemini API key")
             return
         }
 
-        currentApiKey = apiKey.trim()
+        currentApiKey = resolvedKey
         activeModel = model
 
         onDiagnosticLog("Connecting to Gemini Live ($activeModel)...")
@@ -480,7 +488,7 @@ class GeminiLiveService(
 
         onDiagnosticLog("Chat: Generating response for '$prompt'...")
         try {
-            val url = "$REST_BASE_URL/models/gemini-2.0-flash:generateContent?key=$currentApiKey"
+            val url = "$REST_BASE_URL/models/gemini-3.8-flash:generateContent?key=$currentApiKey"
             val bodyJson = JSONObject().apply {
                 put("contents", JSONArray().put(JSONObject().apply {
                     put("parts", JSONArray().put(JSONObject().apply {

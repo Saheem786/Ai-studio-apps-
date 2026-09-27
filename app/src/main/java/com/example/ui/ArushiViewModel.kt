@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.BuildConfig
 import com.example.audio.AudioTrackPlayer
 import com.example.audio.MicrophoneRecorder
+import com.example.data.AppDatabase
+import com.example.data.ChatRepository
 import com.example.device.ContactItem
 import com.example.device.DeviceActionManager
 import com.example.device.DeviceActionResult
@@ -62,27 +64,55 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
     private val deviceActionManager = DeviceActionManager(application.applicationContext)
     private val timeFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
 
+    private val chatDatabase = AppDatabase.getInstance(application)
+    private val chatRepository = ChatRepository(chatDatabase.chatMessageDao())
+
     private var audioPlayer: AudioTrackPlayer? = null
     private var micRecorder: MicrophoneRecorder? = null
     private var geminiService: GeminiLiveService? = null
 
     init {
-        // Load initial API key from BuildConfig or SharedPreferences
+        // Observe persistent chat history from Room Database via Flow
+        viewModelScope.launch {
+            chatRepository.allMessages.collect { messages ->
+                _uiState.update { current ->
+                    val displayList = if (messages.isEmpty()) {
+                        listOf(
+                            ChatMessage(
+                                sender = MessageSender.ASSISTANT,
+                                text = "Hello! Main Sam hoon. Aap mujhse bol kar ya text chat mein kuch bhi pooch sakte hain aur device actions (WhatsApp, Call, YouTube, etc.) chala sakte hain."
+                            )
+                        )
+                    } else {
+                        messages
+                    }
+                    current.copy(chatMessages = displayList)
+                }
+            }
+        }
+
+        // Load initial API key from SharedPreferences or BuildConfig
         val prefs = application.getSharedPreferences("arushi_prefs", Context.MODE_PRIVATE)
-        val savedKey = prefs.getString("custom_gemini_key", null)
+        val savedKey = prefs.getString("gemini_api_key", null)?.trim()?.ifEmpty { null }
+            ?: prefs.getString("custom_gemini_key", null)?.trim()?.ifEmpty { null }
         val initialKey = if (!savedKey.isNullOrBlank()) {
             savedKey
         } else {
             try {
-                BuildConfig.GEMINI_API_KEY
+                BuildConfig.GEMINI_API_KEY.trim()
             } catch (e: Exception) {
                 ""
             }
         }
 
-        _uiState.update { it.copy(apiKey = initialKey ?: "") }
+        _uiState.update { it.copy(apiKey = initialKey) }
 
         initAudioSystem()
+        geminiService?.setApiKey(initialKey)
+        if (initialKey.isNotBlank()) {
+            addLog("Loaded Gemini API key from storage (${initialKey.take(4)}...${initialKey.takeLast(4)})")
+        }
+        addLog("Room Database initialized: chat history loaded")
     }
 
     private fun addLog(message: String) {
@@ -169,12 +199,14 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
             onTranscriptReceived = { text, isUser ->
                 val prefix = if (isUser) "You: " else "Sam: "
                 val sender = if (isUser) MessageSender.USER else MessageSender.ASSISTANT
+                val newMsg = ChatMessage(sender = sender, text = text)
                 _uiState.update { current ->
-                    val newMsg = ChatMessage(sender = sender, text = text)
                     current.copy(
-                        transcript = "$prefix$text",
-                        chatMessages = current.chatMessages + newMsg
+                        transcript = "$prefix$text"
                     )
+                }
+                viewModelScope.launch {
+                    chatRepository.saveMessage(newMsg)
                 }
                 addLog("$prefix$text")
             },
@@ -211,6 +243,15 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
                         name,
                         mapOf("success" to success, "message" to msg)
                     )
+                    chatRepository.saveMessage(
+                        ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = "WhatsApp action: $msg",
+                            isAction = true,
+                            actionName = "openWhatsApp",
+                            actionDetail = msg
+                        )
+                    )
                 }
 
                 "openApp" -> {
@@ -223,6 +264,15 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
                         callId,
                         name,
                         mapOf("success" to success, "appName" to appName, "message" to msg)
+                    )
+                    chatRepository.saveMessage(
+                        ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = "Opened app '$appName': $msg",
+                            isAction = true,
+                            actionName = "openApp",
+                            actionDetail = msg
+                        )
                     )
                 }
 
@@ -237,6 +287,15 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
                         name,
                         mapOf("success" to success, "url" to url, "message" to msg)
                     )
+                    chatRepository.saveMessage(
+                        ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = "Opened website: $url",
+                            isAction = true,
+                            actionName = "openWebsite",
+                            actionDetail = msg
+                        )
+                    )
                 }
 
                 "makeCall" -> {
@@ -249,6 +308,15 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
                         callId,
                         name,
                         mapOf("success" to success, "phoneNumber" to phone, "message" to msg)
+                    )
+                    chatRepository.saveMessage(
+                        ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = "Call action ($phone): $msg",
+                            isAction = true,
+                            actionName = "makeCall",
+                            actionDetail = msg
+                        )
                     )
                 }
 
@@ -265,6 +333,15 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
                                     "success" to true,
                                     "contact" to result.contact.name,
                                     "phone" to result.contact.phoneNumber
+                                )
+                            )
+                            chatRepository.saveMessage(
+                                ChatMessage(
+                                    sender = MessageSender.ASSISTANT,
+                                    text = "${result.contact.name} (${result.contact.phoneNumber}) ko call mila diya hai. 📞",
+                                    isAction = true,
+                                    actionName = "callContact",
+                                    actionDetail = result.message
                                 )
                             )
                         }
@@ -336,7 +413,12 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun startSession() {
-        val key = _uiState.value.apiKey
+        val prefs = getApplication<Application>().getSharedPreferences("arushi_prefs", Context.MODE_PRIVATE)
+        val key = _uiState.value.apiKey.ifBlank {
+            prefs.getString("gemini_api_key", null)?.trim()?.ifEmpty { null }
+                ?: prefs.getString("custom_gemini_key", null)?.trim()?.ifEmpty { null }
+                ?: ""
+        }
         if (key.isBlank()) {
             _uiState.update {
                 it.copy(
@@ -346,6 +428,11 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
             }
             return
         }
+
+        if (_uiState.value.apiKey != key) {
+            _uiState.update { it.copy(apiKey = key) }
+        }
+        geminiService?.setApiKey(key)
 
         _uiState.update {
             it.copy(
@@ -410,7 +497,18 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
 
     fun selectContactToCall(contact: ContactItem) {
         _uiState.update { it.copy(multipleContacts = null, actionBanner = "Calling ${contact.name}...") }
-        deviceActionManager.makeCall(contact.phoneNumber)
+        val result = deviceActionManager.makeCall(contact.phoneNumber)
+        val msg = if (result is DeviceActionResult.Success) result.message else (result as? DeviceActionResult.Failure)?.error ?: ""
+        val actionMsg = ChatMessage(
+            sender = MessageSender.ASSISTANT,
+            text = "${contact.name} (${contact.phoneNumber}) ko call mila diya hai. 📞",
+            isAction = true,
+            actionName = "callContact",
+            actionDetail = msg
+        )
+        viewModelScope.launch {
+            chatRepository.saveMessage(actionMsg)
+        }
         geminiService?.sendUserText("I want to call ${contact.name}")
     }
 
@@ -421,9 +519,13 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
     fun updateApiKey(newKey: String) {
         val trimmed = newKey.trim()
         val prefs = getApplication<Application>().getSharedPreferences("arushi_prefs", Context.MODE_PRIVATE)
-        prefs.edit().putString("custom_gemini_key", trimmed).apply()
-        _uiState.update { it.copy(apiKey = trimmed, showSettingsDialog = false) }
-        addLog("Gemini API key updated")
+        prefs.edit()
+            .putString("gemini_api_key", trimmed)
+            .putString("custom_gemini_key", trimmed)
+            .commit()
+        geminiService?.setApiKey(trimmed)
+        _uiState.update { it.copy(apiKey = trimmed, showSettingsDialog = false, errorMessage = null) }
+        addLog("Gemini API key updated and saved into SharedPreferences")
     }
 
     fun toggleDiagnosticsSheet(show: Boolean) {
@@ -453,10 +555,12 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
         val userMsg = ChatMessage(sender = MessageSender.USER, text = text)
         _uiState.update { current ->
             current.copy(
-                chatMessages = current.chatMessages + userMsg,
                 inputText = "",
                 isSendingChat = true
             )
+        }
+        viewModelScope.launch {
+            chatRepository.saveMessage(userMsg)
         }
         addLog("Chat message sent: '$text'")
 
@@ -472,7 +576,10 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
                 actionName = "openWhatsApp",
                 actionDetail = msg
             )
-            _uiState.update { it.copy(chatMessages = it.chatMessages + actionMsg, isSendingChat = false) }
+            viewModelScope.launch {
+                chatRepository.saveMessage(actionMsg)
+            }
+            _uiState.update { it.copy(isSendingChat = false) }
             return
         } else if (lower.startsWith("call ") || lower.contains("ko call karo") || lower.contains("ko phone lagao")) {
             val contactQuery = text.replace(Regex("(?i)^(call|call to|phone|phone lagao)\\s*"), "")
@@ -489,7 +596,10 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
                             actionName = "callContact",
                             actionDetail = result.message
                         )
-                        _uiState.update { it.copy(chatMessages = it.chatMessages + actionMsg, isSendingChat = false) }
+                        viewModelScope.launch {
+                            chatRepository.saveMessage(actionMsg)
+                        }
+                        _uiState.update { it.copy(isSendingChat = false) }
                         return
                     }
                     is DeviceActionResult.MultipleContactsFound -> {
@@ -502,6 +612,19 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
         }
 
         viewModelScope.launch {
+            val effectiveKey = _uiState.value.apiKey.ifBlank {
+                val prefs = getApplication<Application>().getSharedPreferences("arushi_prefs", Context.MODE_PRIVATE)
+                prefs.getString("gemini_api_key", null)?.trim()?.ifEmpty { null }
+                    ?: prefs.getString("custom_gemini_key", null)?.trim()?.ifEmpty { null }
+                    ?: ""
+            }
+            if (effectiveKey.isNotBlank()) {
+                geminiService?.setApiKey(effectiveKey)
+                if (_uiState.value.apiKey != effectiveKey) {
+                    _uiState.update { it.copy(apiKey = effectiveKey) }
+                }
+            }
+
             if (geminiService?.isSessionActive() == true) {
                 geminiService?.sendUserText(text)
                 _uiState.update { it.copy(isSendingChat = false) }
@@ -512,11 +635,9 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
                     sender = MessageSender.ASSISTANT,
                     text = reply
                 )
+                chatRepository.saveMessage(assistantMsg)
                 _uiState.update {
-                    it.copy(
-                        chatMessages = it.chatMessages + assistantMsg,
-                        isSendingChat = false
-                    )
+                    it.copy(isSendingChat = false)
                 }
 
                 if (!audioBase64.isNullOrEmpty()) {
@@ -534,15 +655,16 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun clearChatHistory() {
-        _uiState.update {
-            it.copy(
-                chatMessages = listOf(
-                    ChatMessage(
-                        sender = MessageSender.ASSISTANT,
-                        text = "Chat history clear ho gayi hai. Aap kya poochna chahte hain?"
-                    )
-                )
-            )
+        viewModelScope.launch {
+            chatRepository.clearHistory()
+            addLog("Persistent Room chat history cleared")
+        }
+    }
+
+    fun deleteChatMessage(id: String) {
+        viewModelScope.launch {
+            chatRepository.deleteMessage(id)
+            addLog("Message removed from Room database")
         }
     }
 

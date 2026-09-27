@@ -11,6 +11,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -620,7 +621,7 @@ fun SettingsDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "Default Model: gemini-2.0-flash-exp\nVoice Profile: Aoede (Expressive & Natural)",
+                    text = "Default Model: gemini-3.8-flash\nVoice Profile: Aoede (Expressive & Natural)",
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontSize = 11.sp,
                         color = ArushiPurpleSecondary
@@ -1025,6 +1026,238 @@ fun ChatScreenView(
                         tint = if (inputText.isNotBlank()) ArushiDarkBg else ArushiTextMuted,
                         modifier = Modifier.size(20.dp)
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun VoiceConversationLogsCard(
+    messages: List<ChatMessage>,
+    onOpenFullChat: () -> Unit,
+    onClearHistory: () -> Unit,
+    onSpeakMessage: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = ArushiSurfaceElevated.copy(alpha = 0.85f)),
+        shape = RoundedCornerShape(18.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, ArushiSurfaceBorder)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp)
+        ) {
+            // Header: Title, Room DB persistent indicator, and actions
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(ArushiPurplePrimary.copy(alpha = 0.25f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Chat,
+                            contentDescription = "Conversation History",
+                            tint = ArushiPurpleSecondary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    Column {
+                        Text(
+                            text = "Conversation Logs",
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                color = ArushiTextPrimary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        )
+                        Text(
+                            text = "Room Database Persistent (${messages.size})",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = ArushiCyanGlow,
+                                fontSize = 10.sp
+                            )
+                        )
+                    }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    TextButton(
+                        onClick = onOpenFullChat,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.height(30.dp)
+                    ) {
+                        Text(
+                            text = "Full Chat",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = ArushiCyan,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        )
+                    }
+
+                    if (messages.isNotEmpty()) {
+                        IconButton(
+                            onClick = onClearHistory,
+                            modifier = Modifier.size(30.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DeleteOutline,
+                                contentDescription = "Clear History",
+                                tint = ArushiTextMuted,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Recent messages list (last 4 messages displayed directly)
+            val displayList = messages.takeLast(4)
+            if (displayList.isEmpty()) {
+                Surface(
+                    color = ArushiDarkBg.copy(alpha = 0.4f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "No conversation history yet. Start talking to Sam or ask a question to see real-time persistent logs.",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            color = ArushiTextMuted,
+                            fontSize = 11.sp
+                        ),
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
+            } else {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    displayList.forEach { msg ->
+                        val isUser = msg.sender == MessageSender.USER
+                        Surface(
+                            color = if (isUser) ArushiPurplePrimary.copy(alpha = 0.2f) else ArushiDarkBg.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(10.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isUser) ArushiPurplePrimary.copy(alpha = 0.4f) else ArushiSurfaceBorder
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    Surface(
+                                        color = if (isUser) ArushiPurplePrimary else ArushiCyan.copy(alpha = 0.2f),
+                                        shape = CircleShape,
+                                        modifier = Modifier.size(20.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                imageVector = if (isUser) Icons.Default.Person else Icons.Default.SmartToy,
+                                                contentDescription = null,
+                                                tint = if (isUser) Color.White else ArushiCyanGlow,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Text(
+                                                text = if (isUser) "You" else "Sam",
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    color = if (isUser) ArushiPurpleSecondary else ArushiCyan,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 11.sp
+                                                )
+                                            )
+                                            Text(
+                                                text = timeFormat.format(Date(msg.timestamp)),
+                                                style = MaterialTheme.typography.bodySmall.copy(
+                                                    color = ArushiTextMuted,
+                                                    fontSize = 10.sp
+                                                )
+                                            )
+                                        }
+
+                                        Text(
+                                            text = msg.text,
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                color = ArushiTextPrimary,
+                                                lineHeight = 16.sp,
+                                                fontSize = 12.sp
+                                            ),
+                                            maxLines = 3,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.padding(top = 2.dp)
+                                        )
+
+                                        if (msg.isAction && msg.actionDetail != null) {
+                                            Text(
+                                                text = "⚙️ ${msg.actionDetail}",
+                                                style = MaterialTheme.typography.bodySmall.copy(
+                                                    color = ArushiCyanGlow,
+                                                    fontSize = 10.sp
+                                                ),
+                                                modifier = Modifier.padding(top = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                if (!isUser) {
+                                    IconButton(
+                                        onClick = { onSpeakMessage(msg.text) },
+                                        modifier = Modifier.size(22.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                                            contentDescription = "Speak",
+                                            tint = ArushiCyan,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

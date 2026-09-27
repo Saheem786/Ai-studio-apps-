@@ -8,9 +8,9 @@ You are Sam, a confident, witty, playful, and emotionally responsive virtual ass
 """
 
     // Preferred Gemini Live models as explicitly requested
-    const val MODEL_LIVE_PRIMARY = "models/gemini-2.0-flash-exp"
-    const val MODEL_LIVE_PREVIEW = "models/gemini-2.5-flash-native-audio-preview-12-2025"
-    const val MODEL_LIVE_EXP = "models/gemini-2.0-flash-exp"
+    const val MODEL_LIVE_PRIMARY = "models/gemini-3.8-flash"
+    const val MODEL_LIVE_PREVIEW = "models/gemini-3.8-flash"
+    const val MODEL_LIVE_EXP = "models/gemini-3.8-flash"
 
     // Expressive natural female voice
     const val VOICE_NAME = "Aoede" // Or "Kore"

@@ -227,6 +227,16 @@ fun ArushiScreen(
                 QuickActionChips(
                     onChipClick = { prompt -> viewModel.sendQuickPrompt(prompt) }
                 )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Persistent Conversation Logs (Room Database) displayed alongside the voice assistant interaction
+                VoiceConversationLogsCard(
+                    messages = uiState.chatMessages,
+                    onOpenFullChat = { viewModel.setAppMode(AppMode.CHAT) },
+                    onClearHistory = { viewModel.clearChatHistory() },
+                    onSpeakMessage = { viewModel.speakMessage(it) }
+                )
             }
 
             // Bottom Section: Speaker Diagnostic & Big Power/Mic Button

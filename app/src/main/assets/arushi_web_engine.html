@@ -165,10 +165,10 @@
       }
     };
 
-    // Connect to Gemini Live WebSocket with models/gemini-2.0-flash-exp
+    // Connect to Gemini Live WebSocket with models/gemini-3.8-flash
     window.connectGeminiLive = function(apiKey) {
       initAudioContext();
-      const model = "models/gemini-2.0-flash-exp";
+      const model = "models/gemini-3.8-flash";
       const wsUrl = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=" + apiKey;
 
       log("Connecting to Gemini Live WebSocket with " + model + "...");
@@ -181,7 +181,7 @@
           window.AndroidBridge.onConnected();
         }
 
-        // Setup message with models/gemini-2.0-flash-exp
+        // Setup message with models/gemini-3.8-flash
         const setupMsg = {
           setup: {
             model: model,
@@ -210,7 +210,7 @@
           }
         };
         webSocket.send(JSON.stringify(setupMsg));
-        log("Setup frame sent with models/gemini-2.0-flash-exp");
+        log("Setup frame sent with models/gemini-3.8-flash");
       };
 
       webSocket.onmessage = function(event) {
