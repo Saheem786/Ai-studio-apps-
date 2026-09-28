@@ -569,7 +569,7 @@ fun SettingsDialog(
     voiceMatchEnforced: Boolean,
     onVoiceMatchEnforcedChanged: (Boolean) -> Unit,
     isVoiceCalibrationCompleted: Boolean,
-    onCalibrateVoiceClicked: () -> Unit,
+    onOpenVoiceEnrollment: () -> Unit,
     onClearVoiceClicked: () -> Unit,
     floatingWidgetEnabled: Boolean,
     onFloatingWidgetEnabledChanged: (Boolean) -> Unit,
@@ -864,6 +864,19 @@ fun SettingsDialog(
                     )
                 }
 
+                OutlinedButton(
+                    onClick = { onOpenVoiceEnrollment() },
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("🎙️ Train / Calibrate Voiceprint")
+                }
+
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Row(
@@ -871,7 +884,7 @@ fun SettingsDialog(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Button(
-                        onClick = onCalibrateVoiceClicked,
+                        onClick = onOpenVoiceEnrollment,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (isVoiceCalibrationCompleted) SamSurface else SamPurplePrimary
                         ),

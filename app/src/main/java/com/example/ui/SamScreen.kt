@@ -403,7 +403,7 @@ fun SamScreen(
             voiceMatchEnforced = uiState.voiceMatchEnforced,
             onVoiceMatchEnforcedChanged = { enabled -> viewModel.toggleVoiceMatchEnforced(enabled) },
             isVoiceCalibrationCompleted = uiState.isVoiceCalibrationCompleted,
-            onCalibrateVoiceClicked = {
+            onOpenVoiceEnrollment = {
                 viewModel.toggleSettingsDialog(false)
                 viewModel.toggleVoiceEnrollmentDialog(true)
             },
