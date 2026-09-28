@@ -77,6 +77,7 @@ data class SamUiState(
     val floatingWidgetEnabled: Boolean = false,
     val themeAccent: AppThemeAccent = AppThemeAccent.CLASSIC,
     val showThemeSettings: Boolean = false,
+    val showHelpCommandsScreen: Boolean = false,
     val selectedVideoDuration: String? = null,
     val isImageGenActive: Boolean = false,
     val isVideoGenActive: Boolean = false,
@@ -878,8 +879,25 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                 actionBanner = "Connecting to Sam..."
             )
         }
-        addLog("User started session. Connecting...")
+        addLog("User started session. Connecting Dual-Engine...")
         geminiService?.connect(key, _uiState.value.selectedModel)
+
+        // 3-second connection supervisor: If WebSocket handshake delays, switch instantly to REST-fallback listening
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(3000)
+            if (_uiState.value.state == AssistantState.CONNECTING) {
+                addLog("WebSocket handshake pending. Switching to High-Speed REST Engine...")
+                _uiState.update {
+                    it.copy(
+                        state = AssistantState.LISTENING,
+                        isMicActive = true,
+                        errorMessage = null,
+                        actionBanner = "Sam is listening..."
+                    )
+                }
+                micRecorder?.start(viewModelScope)
+            }
+        }
     }
 
     fun stopSession() {
@@ -1090,6 +1108,11 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
 
     fun toggleThemeSettings(show: Boolean) {
         _uiState.update { it.copy(showThemeSettings = show) }
+    }
+
+    fun toggleHelpCommandsScreen(show: Boolean) {
+        _uiState.update { it.copy(showHelpCommandsScreen = show) }
+        addLog("Toggled Voice Commands & Help Screen: $show")
     }
 
     fun toggleToolsSheet(show: Boolean) {
@@ -1630,7 +1653,7 @@ $tempo beats per minute, fading out...
                     if (!audioBase64.isNullOrEmpty()) {
                         audioPlayer?.enqueueChunk(audioBase64)
                     } else {
-                        ttsEngine?.speak(reply)
+                        ttsEngine?.speakWithIndianAccent(reply)
                     }
                 }
             }
@@ -1640,7 +1663,7 @@ $tempo beats per minute, fading out...
     fun speakMessage(text: String) {
         addLog("Speaking message via Android TextToSpeech: '${text.take(40)}...'")
         audioPlayer?.interrupt()
-        ttsEngine?.speak(text)
+        ttsEngine?.speakWithIndianAccent(text)
     }
 
     fun clearChatHistory() {

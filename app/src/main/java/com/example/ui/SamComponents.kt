@@ -35,6 +35,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.BugReport
@@ -108,6 +109,7 @@ import com.example.ui.theme.SamTextSecondary
 @Composable
 fun SamTopBar(
     state: AssistantState,
+    onOpenHelp: () -> Unit,
     onOpenDiagnostics: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
@@ -162,6 +164,22 @@ fun SamTopBar(
 
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             IconButton(
+                onClick = onOpenHelp,
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(SamSurfaceElevated)
+                    .testTag("help_button")
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Help,
+                    contentDescription = "Help & Commands",
+                    tint = SamCyan,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            IconButton(
                 onClick = onOpenDiagnostics,
                 modifier = Modifier
                     .size(42.dp)
@@ -172,7 +190,7 @@ fun SamTopBar(
                 Icon(
                     imageVector = Icons.Default.BugReport,
                     contentDescription = "Diagnostics",
-                    tint = SamCyan,
+                    tint = SamTextSecondary,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -578,6 +596,7 @@ fun SettingsDialog(
     currentThemeAccent: AppThemeAccent,
     onThemeAccentChanged: (AppThemeAccent) -> Unit,
     onOpenFullThemeSettings: () -> Unit,
+    onOpenHelp: () -> Unit = {},
     onSaveKey: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -720,6 +739,27 @@ fun SettingsDialog(
                     )
                 }
 
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = onOpenHelp,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = SamMagenta
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, SamMagenta.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth().testTag("open_help_from_settings_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Help,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "📖 Voice Commands & Help Guide",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(20.dp))
 
                 // Floating Widget Overlay Switch
@@ -825,6 +865,28 @@ fun SettingsDialog(
                 )
                 Spacer(modifier = Modifier.height(10.dp))
 
+                if (isVoiceCalibrationCompleted) {
+                    Surface(
+                        color = Color(0xFF10B981).copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(8.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "✓ Voice Profile Enrolled",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    color = Color(0xFF34D399),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            )
+                        }
+                    }
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -864,55 +926,38 @@ fun SettingsDialog(
                     )
                 }
 
+                Spacer(modifier = Modifier.height(8.dp))
+
                 OutlinedButton(
                     onClick = { onOpenVoiceEnrollment() },
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.primary
+                        contentColor = SamCyan
                     ),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                    border = androidx.compose.foundation.BorderStroke(1.dp, SamCyan.copy(alpha = 0.8f)),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
                     Icon(Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("🎙️ Train / Calibrate Voiceprint")
+                    Text(
+                        text = if (isVoiceCalibrationCompleted) "🎙️ Retrain / Calibrate Voiceprint" else "🎙️ Train / Calibrate Voiceprint",
+                        fontWeight = FontWeight.Bold
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Button(
-                        onClick = onOpenVoiceEnrollment,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isVoiceCalibrationCompleted) SamSurface else SamPurplePrimary
-                        ),
+                if (isVoiceCalibrationCompleted) {
+                    OutlinedButton(
+                        onClick = onClearVoiceClicked,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = SamErrorRed),
                         shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.weight(1f)
+                        border = androidx.compose.foundation.BorderStroke(1.dp, SamErrorRed.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                     ) {
                         Text(
-                            text = if (isVoiceCalibrationCompleted) "Recalibrate" else "Enroll Voice",
-                            color = if (isVoiceCalibrationCompleted) SamTextPrimary else SamDarkBg,
+                            text = "Clear Enrolled Voiceprint",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
-                    }
-
-                    if (isVoiceCalibrationCompleted) {
-                        OutlinedButton(
-                            onClick = onClearVoiceClicked,
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = SamErrorRed),
-                            shape = RoundedCornerShape(8.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, SamErrorRed.copy(alpha = 0.5f)),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                text = "Clear print",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
                     }
                 }
 

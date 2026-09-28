@@ -335,89 +335,92 @@ class GeminiLiveService(
         if (currentApiKey.isBlank()) return@withContext false
 
         onDiagnosticLog("REST Fallback: Requesting native audio response for '$prompt'...")
-        try {
-            val url = "$REST_BASE_URL/models/gemini-3.8-flash:generateContent?key=$currentApiKey"
-            val bodyJson = JSONObject().apply {
-                put("contents", JSONArray().put(JSONObject().apply {
-                    put("parts", JSONArray().put(JSONObject().apply {
-                        put("text", prompt)
+        val modelsToTry = listOf("gemini-1.5-flash", "gemini-2.0-flash")
+        for (m in modelsToTry) {
+            try {
+                val cleanModel = m.removePrefix("models/")
+                val url = "https://generativelanguage.googleapis.com/v1beta/models/$cleanModel:generateContent?key=$currentApiKey"
+                val bodyJson = JSONObject().apply {
+                    put("contents", JSONArray().put(JSONObject().apply {
+                        put("parts", JSONArray().put(JSONObject().apply {
+                            put("text", prompt)
+                        }))
                     }))
-                }))
-                put("systemInstruction", JSONObject().apply {
-                    put("parts", JSONArray().put(JSONObject().apply {
-                        put("text", SamPersonality.SYSTEM_INSTRUCTION.trim())
-                    }))
-                })
-                put("generationConfig", JSONObject().apply {
-                    put("responseModalities", JSONArray().put("AUDIO"))
-                    put("speechConfig", JSONObject().apply {
-                        put("voiceConfig", JSONObject().apply {
-                            put("prebuiltVoiceConfig", JSONObject().apply {
-                                put("voiceName", SamPersonality.VOICE_NAME)
+                    put("systemInstruction", JSONObject().apply {
+                        put("parts", JSONArray().put(JSONObject().apply {
+                            put("text", SamPersonality.SYSTEM_INSTRUCTION.trim())
+                        }))
+                    })
+                    put("generationConfig", JSONObject().apply {
+                        put("responseModalities", JSONArray().put("AUDIO"))
+                        put("speechConfig", JSONObject().apply {
+                            put("voiceConfig", JSONObject().apply {
+                                put("prebuiltVoiceConfig", JSONObject().apply {
+                                    put("voiceName", SamPersonality.VOICE_NAME)
+                                })
                             })
                         })
                     })
-                })
-                put("tools", createToolsDeclarationsJson())
-            }
+                    put("tools", createToolsDeclarationsJson())
+                }
 
-            val request = Request.Builder()
-                .url(url)
-                .post(bodyJson.toString().toRequestBody("application/json".toMediaType()))
-                .build()
+                val request = Request.Builder()
+                    .url(url)
+                    .post(bodyJson.toString().toRequestBody("application/json".toMediaType()))
+                    .build()
 
-            val response = okHttpClient.newCall(request).execute()
-            if (!response.isSuccessful) {
-                val err = response.body?.string() ?: "HTTP ${response.code}"
-                onDiagnosticLog("REST Fallback failed: $err")
-                return@withContext false
-            }
+                val response = okHttpClient.newCall(request).execute()
+                if (!response.isSuccessful) {
+                    val err = response.body?.string() ?: "HTTP ${response.code}"
+                    onDiagnosticLog("REST Fallback ($cleanModel) failed: $err")
+                    continue
+                }
 
-            val respString = response.body?.string() ?: ""
-            val jsonResp = JSONObject(respString)
-            val candidates = jsonResp.optJSONArray("candidates")
-            val candidate = candidates?.optJSONObject(0)
-            val parts = candidate?.optJSONObject("content")?.optJSONArray("parts")
+                val respString = response.body?.string() ?: ""
+                val jsonResp = JSONObject(respString)
+                val candidates = jsonResp.optJSONArray("candidates")
+                val candidate = candidates?.optJSONObject(0)
+                val parts = candidate?.optJSONObject("content")?.optJSONArray("parts")
 
-            if (parts != null) {
-                for (i in 0 until parts.length()) {
-                    val p = parts.getJSONObject(i)
-                    if (p.has("functionCall")) {
-                        val fc = p.getJSONObject("functionCall")
-                        val name = fc.getString("name")
-                        val callId = fc.optString("id", java.util.UUID.randomUUID().toString())
-                        val argsObj = fc.optJSONObject("args")
-                        val argsMap = mutableMapOf<String, Any?>()
-                        if (argsObj != null) {
-                            val keys = argsObj.keys()
-                            while (keys.hasNext()) {
-                                val k = keys.next()
-                                argsMap[k] = argsObj.get(k)
+                if (parts != null) {
+                    for (i in 0 until parts.length()) {
+                        val p = parts.getJSONObject(i)
+                        if (p.has("functionCall")) {
+                            val fc = p.getJSONObject("functionCall")
+                            val name = fc.getString("name")
+                            val callId = fc.optString("id", java.util.UUID.randomUUID().toString())
+                            val argsObj = fc.optJSONObject("args")
+                            val argsMap = mutableMapOf<String, Any?>()
+                            if (argsObj != null) {
+                                val keys = argsObj.keys()
+                                while (keys.hasNext()) {
+                                    val k = keys.next()
+                                    argsMap[k] = argsObj.get(k)
+                                }
+                            }
+                            onDiagnosticLog("REST Fallback: Function call detected: $name with args: $argsMap")
+                            withContext(Dispatchers.Main) {
+                                onToolCallReceived(name, callId, argsMap)
                             }
                         }
-                        onDiagnosticLog("REST Fallback: Function call detected: $name with args: $argsMap")
-                        withContext(Dispatchers.Main) {
-                            onToolCallReceived(name, callId, argsMap)
-                        }
-                    }
-                    if (p.has("inlineData")) {
-                        val inline = p.getJSONObject("inlineData")
-                        val mime = inline.optString("mimeType", "audio/pcm;rate=24000")
-                        val data = inline.optString("data", "")
-                        if (data.isNotEmpty()) {
-                            onDiagnosticLog("REST Fallback native audio received (${data.length} chars). Playing...")
-                            onAudioChunkReceived(data, mime)
-                            return@withContext true
+                        if (p.has("inlineData")) {
+                            val inline = p.getJSONObject("inlineData")
+                            val mime = inline.optString("mimeType", "audio/pcm;rate=24000")
+                            val data = inline.optString("data", "")
+                            if (data.isNotEmpty()) {
+                                onDiagnosticLog("REST Fallback native audio received (${data.length} chars). Playing...")
+                                onAudioChunkReceived(data, mime)
+                                return@withContext true
+                            }
                         }
                     }
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "REST Fallback exception with $m", e)
+                onDiagnosticLog("REST Fallback error ($m): ${e.message}")
             }
-            false
-        } catch (e: Exception) {
-            Log.e(TAG, "REST Fallback exception", e)
-            onDiagnosticLog("REST Fallback error: ${e.message}")
-            false
         }
+        false
     }
 
     private fun createToolsDeclarationsJson(): JSONArray {
@@ -688,18 +691,19 @@ class GeminiLiveService(
             return@withContext Pair("⚠️ Kripya Settings (⚙️) mein jakar apni asli Gemini API Key dalein!", null)
         }
 
-        var modelToUse = "gemini-2.0-flash"
+        var modelToUse = "gemini-1.5-flash"
         var attempt = 0
         var response: Response? = null
         var lastErrorCode = 200
         var isNetworkError = false
-        var backoffMs = 1000L // 1s start as requested (1s -> 2s)
+        var backoffMs = 1000L
 
         while (attempt < 4) {
-            onDiagnosticLog("Chat: Generating response using $modelToUse (Attempt ${attempt + 1})...")
+            val cleanModel = modelToUse.trim().removePrefix("models/")
+            onDiagnosticLog("Chat: Generating response using $cleanModel (Attempt ${attempt + 1})...")
             try {
                 isNetworkError = false
-                val url = "https://generativelanguage.googleapis.com/v1beta/models/$modelToUse:generateContent?key=$currentApiKey"
+                val url = "https://generativelanguage.googleapis.com/v1beta/models/$cleanModel:generateContent?key=$currentApiKey"
                 val bodyJson = JSONObject().apply {
                     val contentsArray = JSONArray().apply {
                         put(JSONObject().apply {
@@ -732,7 +736,7 @@ class GeminiLiveService(
                         put("tools", JSONArray().put(JSONObject().apply {
                             put("googleSearch", JSONObject())
                         }))
-                    } else {
+                    } else if (attempt < 2) {
                         put("tools", createToolsDeclarationsJson())
                     }
                 }
@@ -752,13 +756,22 @@ class GeminiLiveService(
                 // Log response code and error body copy using peekBody
                 try {
                     val errBody = response.peekBody(4096).string()
-                    Log.e("GeminiLiveService", "API Error Response: ${response.code} - $errBody")
+                    Log.e("GeminiLiveService", "API Error Response ($cleanModel): ${response.code} - $errBody")
                 } catch (pe: Exception) {
-                    Log.e("GeminiLiveService", "API Error Response: ${response.code}")
+                    Log.e("GeminiLiveService", "API Error Response ($cleanModel): ${response.code}")
                 }
 
-                // If 400, 401, 403, break immediately (invalid credentials / permission)
-                if (response.code in 400..403) {
+                // If 404 (Model Not Found) or 400 (Bad Request on tools schema), switch model / retry without tools
+                if (response.code == 404 || response.code == 400) {
+                    response.close()
+                    modelToUse = if (cleanModel == "gemini-1.5-flash") "gemini-2.0-flash" else "gemini-1.5-flash"
+                    onDiagnosticLog("HTTP ${response.code} on $cleanModel. Retrying immediately with alternative model $modelToUse...")
+                    attempt++
+                    continue
+                }
+
+                // If 401, 403, break immediately (invalid credentials)
+                if (response.code in 401..403) {
                     break
                 }
 
@@ -770,10 +783,10 @@ class GeminiLiveService(
                     backoffMs *= 2
                     attempt++
 
-                    // Fallback to secondary model on 3rd attempt
-                    if (attempt == 2 && modelToUse == "gemini-2.0-flash") {
-                        modelToUse = "gemini-1.5-flash"
-                        onDiagnosticLog("Primary model failed. Falling back to $modelToUse...")
+                    // Switch model on 3rd attempt
+                    if (attempt == 2) {
+                        modelToUse = if (cleanModel == "gemini-1.5-flash") "gemini-2.0-flash" else "gemini-1.5-flash"
+                        onDiagnosticLog("Retrying with $modelToUse...")
                     }
                 } else {
                     break // Non-recoverable error
@@ -786,8 +799,8 @@ class GeminiLiveService(
                 if (attempt < 4) {
                     kotlinx.coroutines.delay(backoffMs)
                     backoffMs *= 2
-                    if (attempt == 2 && modelToUse == "gemini-2.0-flash") {
-                        modelToUse = "gemini-1.5-flash"
+                    if (attempt == 2) {
+                        modelToUse = if (cleanModel == "gemini-1.5-flash") "gemini-2.0-flash" else "gemini-1.5-flash"
                     }
                 }
             }

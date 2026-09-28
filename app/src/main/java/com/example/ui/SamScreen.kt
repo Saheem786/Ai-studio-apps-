@@ -130,6 +130,14 @@ fun SamScreen(
             onAccentSelected = { viewModel.changeThemeAccent(it) },
             onBack = { viewModel.toggleThemeSettings(false) }
         )
+    } else if (uiState.showHelpCommandsScreen) {
+        HelpCommandsScreen(
+            onBack = { viewModel.toggleHelpCommandsScreen(false) },
+            onExecuteCommand = { command ->
+                viewModel.toggleHelpCommandsScreen(false)
+                viewModel.sendChatMessage(command)
+            }
+        )
     } else {
         Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -139,6 +147,7 @@ fun SamScreen(
             Column(modifier = Modifier.fillMaxWidth()) {
                 SamTopBar(
                     state = uiState.state,
+                    onOpenHelp = { viewModel.toggleHelpCommandsScreen(true) },
                     onOpenDiagnostics = { viewModel.toggleDiagnosticsSheet(true) },
                     onOpenSettings = { viewModel.toggleSettingsDialog(true) }
                 )
@@ -417,6 +426,10 @@ fun SamScreen(
             onOpenFullThemeSettings = {
                 viewModel.toggleSettingsDialog(false)
                 viewModel.toggleThemeSettings(true)
+            },
+            onOpenHelp = {
+                viewModel.toggleSettingsDialog(false)
+                viewModel.toggleHelpCommandsScreen(true)
             },
             onSaveKey = { newKey -> viewModel.updateApiKey(newKey) },
             onDismiss = { viewModel.toggleSettingsDialog(false) }

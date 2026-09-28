@@ -150,6 +150,17 @@ class TextToSpeechEngine(
     }
 
     /**
+     * Speaks the given text with Indian English / Hindi locale emphasis if available.
+     */
+    fun speakWithIndianAccent(
+        rawText: String,
+        queueMode: Int = TextToSpeech.QUEUE_FLUSH,
+        utteranceId: String = UUID.randomUUID().toString()
+    ) {
+        speak(rawText, queueMode, utteranceId)
+    }
+
+    /**
      * Speaks the given text using Android's TextToSpeech.
      * Sanitizes markdown formatting and handles queueing.
      */
