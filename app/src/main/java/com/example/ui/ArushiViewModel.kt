@@ -54,7 +54,15 @@ data class ArushiUiState(
         )
     ),
     val inputText: String = "",
-    val isSendingChat: Boolean = false
+    val isSendingChat: Boolean = false,
+    val quickReplies: List<String> = emptyList(),
+    val showQuickRepliesConfigDialog: Boolean = false,
+    val attachedImageBase64: String? = null,
+    val deepResearchEnabled: Boolean = false,
+    val canvasTitle: String = "",
+    val canvasContent: String = "",
+    val canvasContentType: String = "Code",
+    val showCanvas: Boolean = false
 )
 
 class ArushiViewModel(application: Application) : AndroidViewModel(application) {
@@ -107,7 +115,22 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
 
-        _uiState.update { it.copy(apiKey = initialKey) }
+        // Load custom or default quick replies
+        val defaultQuickReplies = listOf(
+            "What's the weather?",
+            "Remind me in 5 mins",
+            "💬 WhatsApp kholo",
+            "Ek joke sunao",
+            "▶️ Open YouTube"
+        )
+        val savedRepliesStr = prefs.getString("quick_replies", null)
+        val replies = if (!savedRepliesStr.isNullOrEmpty()) {
+            savedRepliesStr.split("|||")
+        } else {
+            defaultQuickReplies
+        }
+
+        _uiState.update { it.copy(apiKey = initialKey, quickReplies = replies) }
 
         initAudioSystem()
         geminiService?.setApiKey(initialKey)
@@ -693,17 +716,21 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
         val text = rawText.trim()
         if (text.isBlank()) return
 
-        val userMsg = ChatMessage(sender = MessageSender.USER, text = text)
+        val attachedImg = _uiState.value.attachedImageBase64
+        val isDeepResearch = _uiState.value.deepResearchEnabled
+
+        val userMsg = ChatMessage(sender = MessageSender.USER, text = text, imageBase64 = attachedImg)
         _uiState.update { current ->
             current.copy(
                 inputText = "",
-                isSendingChat = true
+                isSendingChat = true,
+                attachedImageBase64 = null
             )
         }
         viewModelScope.launch {
             chatRepository.saveMessage(userMsg)
         }
-        addLog("Chat message sent: '$text'")
+        addLog("Chat message sent: '$text' (Has Image: ${attachedImg != null}, Deep Research: $isDeepResearch)")
 
         // Check if message corresponds to a common device action
         val lower = text.lowercase()
@@ -720,7 +747,9 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
             viewModelScope.launch {
                 chatRepository.saveMessage(actionMsg)
             }
-            ttsEngine?.speak("WhatsApp open kar diya hai")
+            if (_uiState.value.currentMode == AppMode.VOICE) {
+                ttsEngine?.speak("WhatsApp open kar diya hai")
+            }
             _uiState.update { it.copy(isSendingChat = false) }
             return
         }
@@ -750,7 +779,9 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
                 viewModelScope.launch {
                     chatRepository.saveMessage(actionMsg)
                 }
-                ttsEngine?.speak("$appDisplayName open kar diya hai")
+                if (_uiState.value.currentMode == AppMode.VOICE) {
+                    ttsEngine?.speak("$appDisplayName open kar diya hai")
+                }
                 _uiState.update { it.copy(isSendingChat = false) }
                 return
             }
@@ -774,7 +805,9 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
                         viewModelScope.launch {
                             chatRepository.saveMessage(actionMsg)
                         }
-                        ttsEngine?.speak("${result.contact.name} ko call mila diya hai")
+                        if (_uiState.value.currentMode == AppMode.VOICE) {
+                            ttsEngine?.speak("${result.contact.name} ko call mila diya hai")
+                        }
                         _uiState.update { it.copy(isSendingChat = false) }
                         return
                     }
@@ -805,8 +838,11 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
                 geminiService?.sendUserText(text)
                 _uiState.update { it.copy(isSendingChat = false) }
             } else {
-                val (reply, audioBase64) = geminiService?.generateChatResponse(text)
-                    ?: Pair("Sam is unavailable right now.", null)
+                val (reply, audioBase64) = geminiService?.generateChatResponse(
+                    prompt = text,
+                    base64Image = attachedImg,
+                    isDeepResearch = isDeepResearch
+                ) ?: Pair("Sam is unavailable right now.", null)
                 val assistantMsg = ChatMessage(
                     sender = MessageSender.ASSISTANT,
                     text = reply
@@ -816,11 +852,12 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
                     it.copy(isSendingChat = false)
                 }
 
-                if (!audioBase64.isNullOrEmpty()) {
-                    audioPlayer?.enqueueChunk(audioBase64)
-                } else {
-                    // Output voice response via Android TextToSpeech engine
-                    ttsEngine?.speak(reply)
+                if (_uiState.value.currentMode == AppMode.VOICE) {
+                    if (!audioBase64.isNullOrEmpty()) {
+                        audioPlayer?.enqueueChunk(audioBase64)
+                    } else {
+                        ttsEngine?.speak(reply)
+                    }
                 }
             }
         }
@@ -844,6 +881,72 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
             chatRepository.deleteMessage(id)
             addLog("Message removed from Room database")
         }
+    }
+
+    fun addQuickReply(phrase: String) {
+        val trimmed = phrase.trim()
+        if (trimmed.isBlank()) return
+        val current = _uiState.value.quickReplies.toMutableList()
+        if (!current.contains(trimmed)) {
+            current.add(trimmed)
+            saveQuickReplies(current)
+            addLog("Added quick reply: '$trimmed'")
+        }
+    }
+
+    fun removeQuickReply(phrase: String) {
+        val current = _uiState.value.quickReplies.toMutableList()
+        if (current.remove(phrase)) {
+            saveQuickReplies(current)
+            addLog("Removed quick reply: '$phrase'")
+        }
+    }
+
+    fun resetQuickReplies() {
+        val defaultQuickReplies = listOf(
+            "What's the weather?",
+            "Remind me in 5 mins",
+            "💬 WhatsApp kholo",
+            "Ek joke sunao",
+            "▶️ Open YouTube"
+        )
+        saveQuickReplies(defaultQuickReplies)
+        addLog("Reset quick replies to default")
+    }
+
+    private fun saveQuickReplies(list: List<String>) {
+        val prefs = getApplication<Application>().getSharedPreferences("arushi_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("quick_replies", list.joinToString("|||")).apply()
+        _uiState.update { it.copy(quickReplies = list) }
+    }
+
+    fun toggleQuickRepliesConfigDialog(show: Boolean) {
+        _uiState.update { it.copy(showQuickRepliesConfigDialog = show) }
+    }
+
+    fun setAttachedImage(base64: String?) {
+        _uiState.update { it.copy(attachedImageBase64 = base64) }
+    }
+
+    fun setDeepResearchEnabled(enabled: Boolean) {
+        _uiState.update { it.copy(deepResearchEnabled = enabled) }
+        addLog("Deep Research mode toggled to: $enabled")
+    }
+
+    fun openCanvas(title: String, content: String, contentType: String = "Code") {
+        _uiState.update {
+            it.copy(
+                canvasTitle = title,
+                canvasContent = content,
+                canvasContentType = contentType,
+                showCanvas = true
+            )
+        }
+        addLog("Opened Canvas Workspace for: $title ($contentType)")
+    }
+
+    fun closeCanvas() {
+        _uiState.update { it.copy(showCanvas = false) }
     }
 
     override fun onCleared() {

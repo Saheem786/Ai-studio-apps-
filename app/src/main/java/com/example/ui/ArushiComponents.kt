@@ -726,10 +726,12 @@ fun AppModeToggle(
 }
 
 @Composable
-fun ChatScreenView(
+fun LegacyChatScreenView(
     messages: List<ChatMessage>,
     inputText: String,
     isSending: Boolean,
+    quickReplies: List<String>,
+    onConfigureQuickReplies: () -> Unit,
     onInputChanged: (String) -> Unit,
     onSendMessage: (String) -> Unit,
     onSpeakMessage: (String) -> Unit,
@@ -794,21 +796,15 @@ fun ChatScreenView(
                     .navigationBarsPadding() // Handles Android navigation bar only, DO NOT put another .imePadding() here!
             ) {
                 // Quick prompt chips
-                val chatSuggestions = listOf(
-                    "💬 WhatsApp kholo",
-                    "📞 Mom ko call karo",
-                    "Ek joke sunao",
-                    "Mausam kaisa hai?",
-                    "▶️ Open YouTube"
-                )
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
                         .padding(horizontal = 16.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    chatSuggestions.forEach { suggestion ->
+                    quickReplies.forEach { suggestion ->
                         Surface(
                             color = ArushiSurfaceElevated,
                             shape = RoundedCornerShape(16.dp),
@@ -824,6 +820,37 @@ fun ChatScreenView(
                                     fontSize = 11.sp
                                 ),
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+
+                    // Configure Button
+                    Surface(
+                        color = ArushiPurplePrimary.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(16.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, ArushiPurplePrimary.copy(alpha = 0.4f)),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { onConfigureQuickReplies() }
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "Configure Quick Replies",
+                                tint = ArushiPurpleSecondary,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = "Configure",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    color = ArushiPurpleSecondary,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
                             )
                         }
                     }
@@ -1276,4 +1303,152 @@ fun VoiceConversationLogsCard(
             }
         }
     }
+}
+
+@Composable
+fun QuickRepliesConfigDialog(
+    quickReplies: List<String>,
+    onAddReply: (String) -> Unit,
+    onRemoveReply: (String) -> Unit,
+    onResetReplies: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var newReplyText by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = ArushiSurfaceElevated,
+        title = {
+            Text(
+                text = "Quick Replies Settings",
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    color = ArushiTextPrimary
+                )
+            )
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Tap a phrase's delete icon to remove it, or enter a new one below to add it to your quick reply chips.",
+                    style = MaterialTheme.typography.bodySmall.copy(color = ArushiTextSecondary)
+                )
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Scrollable list of current replies
+                Surface(
+                    color = ArushiSurface,
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, ArushiSurfaceBorder),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                ) {
+                    if (quickReplies.isEmpty()) {
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                            Text(
+                                text = "No quick replies configured.",
+                                style = MaterialTheme.typography.bodySmall.copy(color = ArushiTextMuted)
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.padding(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(quickReplies) { phrase ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(ArushiSurfaceElevated, RoundedCornerShape(8.dp))
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = phrase,
+                                        style = MaterialTheme.typography.bodySmall.copy(color = ArushiTextPrimary),
+                                        modifier = Modifier.weight(1f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    IconButton(
+                                        onClick = { onRemoveReply(phrase) },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.DeleteOutline,
+                                            contentDescription = "Delete",
+                                            tint = ArushiErrorRed,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Text(
+                    text = "Add New Phrase",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = ArushiCyan
+                    )
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = newReplyText,
+                        onValueChange = { newReplyText = it },
+                        placeholder = { Text("e.g. Remind me in 5 mins", color = ArushiTextMuted, fontSize = 13.sp) },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = ArushiTextPrimary,
+                            unfocusedTextColor = ArushiTextPrimary,
+                            focusedBorderColor = ArushiCyan,
+                            unfocusedBorderColor = ArushiSurfaceBorder,
+                            focusedContainerColor = ArushiSurface,
+                            unfocusedContainerColor = ArushiSurface
+                        ),
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    Button(
+                        onClick = {
+                            if (newReplyText.isNotBlank()) {
+                                onAddReply(newReplyText)
+                                newReplyText = ""
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = ArushiCyan),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.height(48.dp)
+                    ) {
+                        Text("Add", color = ArushiDarkBg, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = ArushiPurplePrimary)
+            ) {
+                Text("Done", color = ArushiDarkBg, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onResetReplies) {
+                Text("Reset Defaults", color = ArushiPurpleSecondary)
+            }
+        }
+    )
 }

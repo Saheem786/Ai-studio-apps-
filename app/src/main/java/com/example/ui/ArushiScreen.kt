@@ -56,6 +56,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.core.content.ContextCompat
 import com.example.ui.theme.ArushiCyan
 import com.example.ui.theme.ArushiCyanGlow
@@ -90,6 +92,24 @@ fun ArushiScreen(
     val contactsPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { /* result handled dynamically */ }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                val inputStream = context.contentResolver.openInputStream(uri)
+                val bytes = inputStream?.readBytes()
+                if (bytes != null) {
+                    val base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                    viewModel.setAttachedImage(base64)
+                    Toast.makeText(context, "Image attached!", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Image error: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     fun handleMicClick() {
         val hasMicPermission = ContextCompat.checkSelfPermission(
@@ -128,6 +148,15 @@ fun ArushiScreen(
                 messages = uiState.chatMessages,
                 inputText = uiState.inputText,
                 isSending = uiState.isSendingChat,
+                quickReplies = uiState.quickReplies,
+                attachedImageBase64 = uiState.attachedImageBase64,
+                onRemoveAttachedImage = { viewModel.setAttachedImage(null) },
+                onOpenToolsSheet = {
+                    photoPickerLauncher.launch(
+                        PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly)
+                    )
+                },
+                onConfigureQuickReplies = { viewModel.toggleQuickRepliesConfigDialog(true) },
                 onInputChanged = { viewModel.updateInputText(it) },
                 onSendMessage = { viewModel.sendChatMessage(it) },
                 onSpeakMessage = { viewModel.speakMessage(it) },
@@ -371,6 +400,31 @@ fun ArushiScreen(
             onDismiss = { viewModel.toggleSettingsDialog(false) }
         )
     }
+
+    // Quick Replies Configuration Dialog
+    if (uiState.showQuickRepliesConfigDialog) {
+        QuickRepliesConfigDialog(
+            quickReplies = uiState.quickReplies,
+            onAddReply = { phrase -> viewModel.addQuickReply(phrase) },
+            onRemoveReply = { phrase -> viewModel.removeQuickReply(phrase) },
+            onResetReplies = { viewModel.resetQuickReplies() },
+            onDismiss = { viewModel.toggleQuickRepliesConfigDialog(false) }
+        )
+    }
+
+    // Canvas Workspace Panel View
+    CanvasView(
+        isVisible = uiState.showCanvas,
+        canvasTitle = uiState.canvasTitle,
+        canvasContent = uiState.canvasContent,
+        contentType = uiState.canvasContentType,
+        onClose = { viewModel.closeCanvas() },
+        onCopyContent = { text ->
+            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            val clip = android.content.ClipData.newPlainText("Canvas Content", text)
+            clipboard.setPrimaryClip(clip)
+        }
+    )
 
     // Multiple Contacts Resolution Dialog
     uiState.multipleContacts?.let { contacts ->

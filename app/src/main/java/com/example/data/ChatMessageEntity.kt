@@ -14,7 +14,8 @@ data class ChatMessageEntity(
     val timestamp: Long = System.currentTimeMillis(),
     val isAction: Boolean = false,
     val actionName: String? = null,
-    val actionDetail: String? = null
+    val actionDetail: String? = null,
+    val imageBase64: String? = null
 ) {
     fun toChatMessage(): ChatMessage {
         val messageSender = try {
@@ -29,7 +30,8 @@ data class ChatMessageEntity(
             timestamp = timestamp,
             isAction = isAction,
             actionName = actionName,
-            actionDetail = actionDetail
+            actionDetail = actionDetail,
+            imageBase64 = imageBase64
         )
     }
 
@@ -42,7 +44,8 @@ data class ChatMessageEntity(
                 timestamp = msg.timestamp,
                 isAction = msg.isAction,
                 actionName = msg.actionName,
-                actionDetail = msg.actionDetail
+                actionDetail = msg.actionDetail,
+                imageBase64 = msg.imageBase64
             )
         }
     }

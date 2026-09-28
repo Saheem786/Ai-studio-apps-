@@ -19,5 +19,6 @@ data class ChatMessage(
     val timestamp: Long = System.currentTimeMillis(),
     val isAction: Boolean = false,
     val actionName: String? = null,
-    val actionDetail: String? = null
+    val actionDetail: String? = null,
+    val imageBase64: String? = null
 )

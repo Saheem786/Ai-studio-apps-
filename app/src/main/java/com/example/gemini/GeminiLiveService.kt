@@ -331,8 +331,6 @@ class GeminiLiveService(
 
     /**
      * Fallback REST Native Audio Generation
-     * In case WebSocket encounters an emulator firewall, this directly requests native audio
-     * from Gemini and sends audio chunks to our AudioTrack player!
      */
     suspend fun generateRestAudioFallback(prompt: String): Boolean = withContext(Dispatchers.IO) {
         if (currentApiKey.isBlank()) return@withContext false
@@ -427,13 +425,11 @@ class GeminiLiveService(
         return JSONArray().put(JSONObject().apply {
             val funcs = JSONArray()
 
-            // openWhatsApp
             funcs.put(JSONObject().apply {
                 put("name", "openWhatsApp")
                 put("description", "Open WhatsApp messenger application or web link on the user's phone")
             })
 
-            // openApp
             funcs.put(JSONObject().apply {
                 put("name", "openApp")
                 put("description", "Open a supported application on the user's device (WhatsApp, YouTube, Instagram, Maps, Chrome, Camera, Calculator, Settings, Clock, Spotify)")
@@ -449,7 +445,6 @@ class GeminiLiveService(
                 })
             })
 
-            // openWebsite
             funcs.put(JSONObject().apply {
                 put("name", "openWebsite")
                 put("description", "Open a website in the device's web browser")
@@ -465,7 +460,6 @@ class GeminiLiveService(
                 })
             })
 
-            // makeCall
             funcs.put(JSONObject().apply {
                 put("name", "makeCall")
                 put("description", "Open phone dialer or initiate a call to a specific phone number")
@@ -481,7 +475,6 @@ class GeminiLiveService(
                 })
             })
 
-            // callContact
             funcs.put(JSONObject().apply {
                 put("name", "callContact")
                 put("description", "Search device contacts by contact name (e.g. Mom, Mummy, Dad, Rahul) and initiate a phone call or dialer")
@@ -503,41 +496,116 @@ class GeminiLiveService(
 
     /**
      * Text Chat request returning (replyText, audioBase64?)
+     * Supports:
+     * - Base64 Image passing
+     * - Deep Research Mode (Google Search grounding integration)
+     * - Research Grounding Sources extraction
+     * - HTTP 429/503 automatic exponential backoff retry + automatic model fallback
+     * - Hindi-language friendly load failure messages
      */
-    suspend fun generateChatResponse(prompt: String): Pair<String, String?> = withContext(Dispatchers.IO) {
+    suspend fun generateChatResponse(
+        prompt: String,
+        base64Image: String? = null,
+        isDeepResearch: Boolean = false
+    ): Pair<String, String?> = withContext(Dispatchers.IO) {
         if (currentApiKey.isBlank()) {
             return@withContext Pair("Please configure your Gemini API key in Settings.", null)
         }
 
-        onDiagnosticLog("Chat: Generating response for '$prompt'...")
+        var modelToUse = "gemini-3.8-flash"
+        var attempt = 0
+        var response: Response? = null
+        var lastErrorCode = 200
+        var backoffMs = 1500L
+
+        while (attempt < 4) {
+            onDiagnosticLog("Chat: Generating response using $modelToUse (Attempt ${attempt + 1})...")
+            try {
+                val url = "$REST_BASE_URL/models/$modelToUse:generateContent?key=$currentApiKey"
+                val bodyJson = JSONObject().apply {
+                    val contentsArray = JSONArray().apply {
+                        put(JSONObject().apply {
+                            val partsArray = JSONArray().apply {
+                                put(JSONObject().apply {
+                                    put("text", prompt)
+                                })
+                                if (!base64Image.isNullOrEmpty()) {
+                                    put(JSONObject().apply {
+                                        put("inlineData", JSONObject().apply {
+                                            put("mimeType", "image/jpeg")
+                                            put("data", base64Image)
+                                        })
+                                    })
+                                }
+                            }
+                            put("parts", partsArray)
+                        })
+                    }
+                    put("contents", contentsArray)
+
+                    put("systemInstruction", JSONObject().apply {
+                        put("parts", JSONArray().put(JSONObject().apply {
+                            put("text", ArushiPersonality.SYSTEM_INSTRUCTION.trim())
+                        }))
+                    })
+
+                    if (isDeepResearch) {
+                        // Append googleSearch tool for Deep Research grounding
+                        put("tools", JSONArray().put(JSONObject().apply {
+                            put("googleSearch", JSONObject())
+                        }))
+                    } else {
+                        put("tools", createToolsDeclarationsJson())
+                    }
+                }
+
+                val request = Request.Builder()
+                    .url(url)
+                    .post(bodyJson.toString().toRequestBody("application/json".toMediaType()))
+                    .build()
+
+                response = okHttpClient.newCall(request).execute()
+                lastErrorCode = response.code
+
+                if (response.isSuccessful) {
+                    break // Succeeded! Break retry loop
+                }
+
+                // If 429 or 503, retry with backoff
+                if (response.code == 429 || response.code == 503) {
+                    onDiagnosticLog("HTTP ${response.code} received. Retrying in ${backoffMs}ms...")
+                    response.close()
+                    kotlinx.coroutines.delay(backoffMs)
+                    backoffMs *= 2
+                    attempt++
+
+                    // Fallback to secondary model on 3rd attempt
+                    if (attempt == 2 && modelToUse == "gemini-3.8-flash") {
+                        modelToUse = "gemini-2.5-flash"
+                        onDiagnosticLog("Primary model failed. Falling back to $modelToUse...")
+                    }
+                } else {
+                    break // Non-recoverable error
+                }
+            } catch (e: Exception) {
+                onDiagnosticLog("Chat API exception: ${e.message}")
+                attempt++
+                if (attempt < 4) {
+                    kotlinx.coroutines.delay(backoffMs)
+                    backoffMs *= 2
+                }
+            }
+        }
+
+        if (response == null || !response.isSuccessful) {
+            val responseMsg = response?.let { " HTTP ${it.code}" } ?: ""
+            onDiagnosticLog("Chat generation failed completely$responseMsg")
+            response?.close()
+            // Return clean friendly Hindi error message
+            return@withContext Pair("Server par abhi thoda zyada load hai. Kripya 30-40 seconds baad dobara try karein!", null)
+        }
+
         try {
-            val url = "$REST_BASE_URL/models/gemini-3.8-flash:generateContent?key=$currentApiKey"
-            val bodyJson = JSONObject().apply {
-                put("contents", JSONArray().put(JSONObject().apply {
-                    put("parts", JSONArray().put(JSONObject().apply {
-                        put("text", prompt)
-                    }))
-                }))
-                put("systemInstruction", JSONObject().apply {
-                    put("parts", JSONArray().put(JSONObject().apply {
-                        put("text", ArushiPersonality.SYSTEM_INSTRUCTION.trim())
-                    }))
-                })
-                put("tools", createToolsDeclarationsJson())
-            }
-
-            val request = Request.Builder()
-                .url(url)
-                .post(bodyJson.toString().toRequestBody("application/json".toMediaType()))
-                .build()
-
-            val response = okHttpClient.newCall(request).execute()
-            if (!response.isSuccessful) {
-                val err = response.body?.string() ?: "HTTP ${response.code}"
-                onDiagnosticLog("Chat API error: $err")
-                return@withContext Pair("Error from Gemini API: $err", null)
-            }
-
             val respString = response.body?.string() ?: ""
             val jsonResp = JSONObject(respString)
             val candidates = jsonResp.optJSONArray("candidates")
@@ -569,11 +637,11 @@ class GeminiLiveService(
                         }
                         if (responseText.isBlank()) {
                             responseText = when (name) {
+                                "openWhatsApp" -> "WhatsApp open kar diya hai! 💬"
                                 "openApp" -> {
                                     val targetApp = argsMap["appName"]?.toString() ?: "App"
                                     "$targetApp open kar diya hai! 🚀"
                                 }
-                                "openWhatsApp" -> "WhatsApp open kar diya hai! 💬"
                                 "openWebsite" -> "Website browser mein open kar diya hai! 🌐"
                                 "callContact" -> {
                                     val contact = argsMap["contactName"]?.toString() ?: "Contact"
@@ -599,6 +667,23 @@ class GeminiLiveService(
                 }
             }
 
+            // Grounding sources parse
+            val grounding = candidate?.optJSONObject("groundingMetadata")
+            val groundingChunks = grounding?.optJSONArray("groundingChunks")
+            if (groundingChunks != null && groundingChunks.length() > 0) {
+                responseText += "\n\n**Sources & Research:**"
+                val uniqueSources = mutableSetOf<String>()
+                for (idx in 0 until groundingChunks.length()) {
+                    val chunk = groundingChunks.getJSONObject(idx)
+                    val web = chunk.optJSONObject("web")
+                    val uri = web?.optString("uri")
+                    val title = web?.optString("title")
+                    if (!uri.isNullOrEmpty() && uniqueSources.add(uri)) {
+                        responseText += "\n- [${title?.ifEmpty { "Source" } ?: "Source"}]($uri)"
+                    }
+                }
+            }
+
             if (responseText.isBlank()) {
                 responseText = "Sam: I am here, but I didn't get any text response."
             }
@@ -606,9 +691,54 @@ class GeminiLiveService(
             onDiagnosticLog("Chat response received: '${responseText.take(60)}...'")
             Pair(responseText, audioBase64)
         } catch (e: Exception) {
-            Log.e(TAG, "Chat API exception", e)
-            onDiagnosticLog("Chat API error: ${e.message}")
+            Log.e(TAG, "Chat API parse exception", e)
+            onDiagnosticLog("Chat API parse error: ${e.message}")
             Pair("Network error: ${e.message}", null)
+        }
+    }
+
+    /**
+     * Image Generation calling Imagen 3 endpoint directly
+     */
+    suspend fun generateImage(prompt: String): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            if (currentApiKey.isBlank()) {
+                return@withContext Result.failure(Exception("API key is not configured."))
+            }
+            onDiagnosticLog("Imagen 3: Requesting image generation for '$prompt'...")
+            val url = "$REST_BASE_URL/models/imagen-3.0-generate-002:generateImages?key=$currentApiKey"
+            val body = JSONObject().apply {
+                put("prompt", prompt)
+                put("numberOfImages", 1)
+                put("outputMimeType", "image/jpeg")
+                put("aspectRatio", "1:1")
+            }
+            val request = Request.Builder()
+                .url(url)
+                .post(body.toString().toRequestBody("application/json".toMediaType()))
+                .build()
+
+            val response = okHttpClient.newCall(request).execute()
+            if (!response.isSuccessful) {
+                return@withContext Result.failure(Exception("Imagen 3 HTTP error ${response.code}: ${response.message}"))
+            }
+
+            val respString = response.body?.string() ?: ""
+            val json = JSONObject(respString)
+            val generatedImages = json.optJSONArray("generatedImages")
+            val firstImage = generatedImages?.optJSONObject(0)
+            val imageObj = firstImage?.optJSONObject("image")
+            val imageBytesBase64 = imageObj?.optString("imageBytes")
+
+            if (!imageBytesBase64.isNullOrEmpty()) {
+                onDiagnosticLog("Imagen 3: Image generated successfully (${imageBytesBase64.length} chars)")
+                Result.success(imageBytesBase64)
+            } else {
+                Result.failure(Exception("No image bytes returned in response."))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Imagen 3 exception", e)
+            Result.failure(e)
         }
     }
 
