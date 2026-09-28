@@ -65,9 +65,9 @@ class GeminiLiveService(
 
     fun connect(apiKey: String = currentApiKey, model: String = SamPersonality.MODEL_LIVE_PRIMARY) {
         val resolvedKey = apiKey.trim().ifEmpty { currentApiKey.trim() }
-        if (resolvedKey.isBlank()) {
-            onError("Gemini API key is missing. Please configure it in Secrets or in Settings.")
-            onDiagnosticLog("Error: Missing Gemini API key")
+        if (resolvedKey.isBlank() || resolvedKey == "MY_GEMINI_API_KEY" || resolvedKey.contains("placeholder", ignoreCase = true)) {
+            onError("⚠️ Kripya Settings (⚙️) mein jakar apni asli Gemini API Key dalein!")
+            onDiagnosticLog("Error: Missing or Placeholder Gemini API key")
             return
         }
 
@@ -685,20 +685,22 @@ class GeminiLiveService(
         base64Image: String? = null,
         isDeepResearch: Boolean = false
     ): Pair<String, String?> = withContext(Dispatchers.IO) {
-        if (currentApiKey.isBlank()) {
-            return@withContext Pair("Please configure your Gemini API key in Settings.", null)
+        if (currentApiKey.isBlank() || currentApiKey == "MY_GEMINI_API_KEY" || currentApiKey.contains("placeholder", ignoreCase = true)) {
+            return@withContext Pair("⚠️ Kripya Settings (⚙️) mein jakar apni asli Gemini API Key dalein!", null)
         }
 
-        var modelToUse = "gemini-3.8-flash"
+        var modelToUse = "gemini-2.0-flash"
         var attempt = 0
         var response: Response? = null
         var lastErrorCode = 200
-        var backoffMs = 1500L
+        var isNetworkError = false
+        var backoffMs = 1000L // 1s start as requested (1s -> 2s)
 
         while (attempt < 4) {
             onDiagnosticLog("Chat: Generating response using $modelToUse (Attempt ${attempt + 1})...")
             try {
-                val url = "$REST_BASE_URL/models/$modelToUse:generateContent?key=$currentApiKey"
+                isNetworkError = false
+                val url = "https://generativelanguage.googleapis.com/v1beta/models/$modelToUse:generateContent?key=$currentApiKey"
                 val bodyJson = JSONObject().apply {
                     val contentsArray = JSONArray().apply {
                         put(JSONObject().apply {
@@ -748,6 +750,19 @@ class GeminiLiveService(
                     break // Succeeded! Break retry loop
                 }
 
+                // Log response code and error body copy using peekBody
+                try {
+                    val errBody = response.peekBody(4096).string()
+                    Log.e("GeminiLiveService", "API Error Response: ${response.code} - $errBody")
+                } catch (pe: Exception) {
+                    Log.e("GeminiLiveService", "API Error Response: ${response.code}")
+                }
+
+                // If 400, 401, 403, break immediately (invalid credentials / permission)
+                if (response.code in 400..403) {
+                    break
+                }
+
                 // If 429 or 503, retry with backoff
                 if (response.code == 429 || response.code == 503) {
                     onDiagnosticLog("HTTP ${response.code} received. Retrying in ${backoffMs}ms...")
@@ -757,19 +772,24 @@ class GeminiLiveService(
                     attempt++
 
                     // Fallback to secondary model on 3rd attempt
-                    if (attempt == 2 && modelToUse == "gemini-3.8-flash") {
-                        modelToUse = "gemini-2.5-flash"
+                    if (attempt == 2 && modelToUse == "gemini-2.0-flash") {
+                        modelToUse = "gemini-1.5-flash"
                         onDiagnosticLog("Primary model failed. Falling back to $modelToUse...")
                     }
                 } else {
                     break // Non-recoverable error
                 }
             } catch (e: Exception) {
+                Log.e("GeminiLiveService", "API call failed with exception: ${e.message}", e)
                 onDiagnosticLog("Chat API exception: ${e.message}")
+                isNetworkError = true
                 attempt++
                 if (attempt < 4) {
                     kotlinx.coroutines.delay(backoffMs)
                     backoffMs *= 2
+                    if (attempt == 2 && modelToUse == "gemini-2.0-flash") {
+                        modelToUse = "gemini-1.5-flash"
+                    }
                 }
             }
         }
@@ -778,8 +798,14 @@ class GeminiLiveService(
             val responseMsg = response?.let { " HTTP ${it.code}" } ?: ""
             onDiagnosticLog("Chat generation failed completely$responseMsg")
             response?.close()
-            // Return clean friendly Hindi error message
-            return@withContext Pair("Server par abhi thoda zyada load hai. Kripya 30-40 seconds baad dobara try karein!", null)
+            
+            val errorText = when {
+                isNetworkError -> "Internet connection check karein aur dobara try karein."
+                lastErrorCode in 400..403 -> "⚠️ API Key galat hai ya expired ho chuki hai. Kripya valid Google AI Studio key dalein."
+                lastErrorCode == 429 || lastErrorCode == 503 -> "Server par abhi thoda zyada load hai. Kripya 30-40 seconds baad dobara try karein!"
+                else -> "Server par abhi thoda zyada load hai. Kripya 30-40 seconds baad dobara try karein!"
+            }
+            return@withContext Pair(errorText, null)
         }
 
         try {

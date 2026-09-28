@@ -837,16 +837,30 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startSession() {
         val prefs = getApplication<Application>().getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
-        val key = _uiState.value.apiKey.ifBlank {
-            prefs.getString("gemini_api_key", null)?.trim()?.ifEmpty { null }
-                ?: prefs.getString("custom_gemini_key", null)?.trim()?.ifEmpty { null }
-                ?: ""
+        val savedKey = prefs.getString("gemini_api_key", "")?.trim()?.ifEmpty {
+            prefs.getString("custom_gemini_key", "")?.trim()
+        } ?: ""
+        
+        val key = if (savedKey.isNotBlank() && savedKey != "MY_GEMINI_API_KEY") {
+            savedKey
+        } else {
+            val stateKey = _uiState.value.apiKey.trim()
+            if (stateKey.isNotBlank() && stateKey != "MY_GEMINI_API_KEY") {
+                stateKey
+            } else {
+                try {
+                    BuildConfig.GEMINI_API_KEY.trim()
+                } catch (e: Exception) {
+                    ""
+                }
+            }
         }
-        if (key.isBlank()) {
+
+        if (key.isBlank() || key == "MY_GEMINI_API_KEY" || key.contains("placeholder", ignoreCase = true)) {
             _uiState.update {
                 it.copy(
                     showSettingsDialog = true,
-                    errorMessage = "Please enter your Gemini API key in Settings"
+                    errorMessage = "⚠️ Kripya Settings (⚙️) mein jakar apni asli Gemini API Key dalein!"
                 )
             }
             return
@@ -1567,12 +1581,26 @@ $tempo beats per minute, fading out...
         }
 
         viewModelScope.launch {
-            val effectiveKey = _uiState.value.apiKey.ifBlank {
-                val prefs = getApplication<Application>().getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
-                prefs.getString("gemini_api_key", null)?.trim()?.ifEmpty { null }
-                    ?: prefs.getString("custom_gemini_key", null)?.trim()?.ifEmpty { null }
-                    ?: ""
+            val prefs = getApplication<Application>().getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
+            val savedKey = prefs.getString("gemini_api_key", "")?.trim()?.ifEmpty {
+                prefs.getString("custom_gemini_key", "")?.trim()
+            } ?: ""
+            
+            val effectiveKey = if (savedKey.isNotBlank() && savedKey != "MY_GEMINI_API_KEY") {
+                savedKey
+            } else {
+                val stateKey = _uiState.value.apiKey.trim()
+                if (stateKey.isNotBlank() && stateKey != "MY_GEMINI_API_KEY") {
+                    stateKey
+                } else {
+                    try {
+                        BuildConfig.GEMINI_API_KEY.trim()
+                    } catch (e: Exception) {
+                        ""
+                    }
+                }
             }
+
             if (effectiveKey.isNotBlank()) {
                 geminiService?.setApiKey(effectiveKey)
                 if (_uiState.value.apiKey != effectiveKey) {
