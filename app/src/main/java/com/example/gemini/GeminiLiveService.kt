@@ -691,118 +691,97 @@ class GeminiLiveService(
             return@withContext Pair("⚠️ Kripya Settings (⚙️) mein jakar apni asli Gemini API Key dalein!", null)
         }
 
-        var modelToUse = "gemini-1.5-flash"
-        var attempt = 0
+        val modelsToTry = listOf("gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro")
         var response: Response? = null
         var lastErrorCode = 200
         var isNetworkError = false
-        var backoffMs = 1000L
 
-        while (attempt < 4) {
-            val cleanModel = modelToUse.trim().removePrefix("models/")
-            onDiagnosticLog("Chat: Generating response using $cleanModel (Attempt ${attempt + 1})...")
-            try {
-                isNetworkError = false
-                val url = "https://generativelanguage.googleapis.com/v1beta/models/$cleanModel:generateContent?key=$currentApiKey"
-                val bodyJson = JSONObject().apply {
-                    val contentsArray = JSONArray().apply {
-                        put(JSONObject().apply {
-                            val partsArray = JSONArray().apply {
-                                put(JSONObject().apply {
-                                    put("text", prompt)
-                                })
-                                if (!base64Image.isNullOrEmpty()) {
-                                    put(JSONObject().apply {
-                                        put("inlineData", JSONObject().apply {
-                                            put("mimeType", "image/jpeg")
-                                            put("data", base64Image)
-                                        })
-                                    })
-                                }
-                            }
-                            put("parts", partsArray)
-                        })
-                    }
-                    put("contents", contentsArray)
+        for (modelName in modelsToTry) {
+            val cleanModel = modelName.trim().removePrefix("models/")
+            onDiagnosticLog("Chat: Generating response using $cleanModel...")
 
-                    put("systemInstruction", JSONObject().apply {
-                        put("parts", JSONArray().put(JSONObject().apply {
-                            put("text", SamPersonality.SYSTEM_INSTRUCTION.trim())
-                        }))
-                    })
-
-                    if (isDeepResearch) {
-                        // Append googleSearch tool for Deep Research grounding
-                        put("tools", JSONArray().put(JSONObject().apply {
-                            put("googleSearch", JSONObject())
-                        }))
-                    } else if (attempt < 2) {
-                        put("tools", createToolsDeclarationsJson())
-                    }
-                }
-
-                val request = Request.Builder()
-                    .url(url)
-                    .post(bodyJson.toString().toRequestBody("application/json".toMediaType()))
-                    .build()
-
-                response = okHttpClient.newCall(request).execute()
-                lastErrorCode = response.code
-
-                if (response.isSuccessful) {
-                    break // Succeeded! Break retry loop
-                }
-
-                // Log response code and error body copy using peekBody
+            // Try with full schema first, and if 400/404, retry with standard minimal payload
+            for (useMinimalist in listOf(false, true)) {
                 try {
-                    val errBody = response.peekBody(4096).string()
-                    Log.e("GeminiLiveService", "API Error Response ($cleanModel): ${response.code} - $errBody")
-                } catch (pe: Exception) {
-                    Log.e("GeminiLiveService", "API Error Response ($cleanModel): ${response.code}")
-                }
+                    isNetworkError = false
+                    val url = "https://generativelanguage.googleapis.com/v1beta/models/$cleanModel:generateContent?key=$currentApiKey"
+                    val bodyJson = JSONObject().apply {
+                        val contentsArray = JSONArray().apply {
+                            put(JSONObject().apply {
+                                val partsArray = JSONArray().apply {
+                                    put(JSONObject().apply {
+                                        put("text", prompt)
+                                    })
+                                    if (!base64Image.isNullOrEmpty()) {
+                                        put(JSONObject().apply {
+                                            put("inlineData", JSONObject().apply {
+                                                put("mimeType", "image/jpeg")
+                                                put("data", base64Image)
+                                            })
+                                        })
+                                    }
+                                }
+                                put("parts", partsArray)
+                            })
+                        }
+                        put("contents", contentsArray)
 
-                // If 404 (Model Not Found) or 400 (Bad Request on tools schema), switch model / retry without tools
-                if (response.code == 404 || response.code == 400) {
-                    response.close()
-                    modelToUse = if (cleanModel == "gemini-1.5-flash") "gemini-2.0-flash" else "gemini-1.5-flash"
-                    onDiagnosticLog("HTTP ${response.code} on $cleanModel. Retrying immediately with alternative model $modelToUse...")
-                    attempt++
-                    continue
-                }
+                        if (!useMinimalist) {
+                            put("systemInstruction", JSONObject().apply {
+                                put("parts", JSONArray().put(JSONObject().apply {
+                                    put("text", SamPersonality.SYSTEM_INSTRUCTION.trim())
+                                }))
+                            })
 
-                // If 401, 403, break immediately (invalid credentials)
-                if (response.code in 401..403) {
-                    break
-                }
-
-                // If 429 or 503, retry with backoff
-                if (response.code == 429 || response.code == 503) {
-                    onDiagnosticLog("HTTP ${response.code} received. Retrying in ${backoffMs}ms...")
-                    response.close()
-                    kotlinx.coroutines.delay(backoffMs)
-                    backoffMs *= 2
-                    attempt++
-
-                    // Switch model on 3rd attempt
-                    if (attempt == 2) {
-                        modelToUse = if (cleanModel == "gemini-1.5-flash") "gemini-2.0-flash" else "gemini-1.5-flash"
-                        onDiagnosticLog("Retrying with $modelToUse...")
+                            if (isDeepResearch) {
+                                put("tools", JSONArray().put(JSONObject().apply {
+                                    put("googleSearch", JSONObject())
+                                }))
+                            } else {
+                                put("tools", createToolsDeclarationsJson())
+                            }
+                        }
                     }
-                } else {
-                    break // Non-recoverable error
-                }
-            } catch (e: Exception) {
-                Log.e("GeminiLiveService", "API call failed with exception: ${e.message}", e)
-                onDiagnosticLog("Chat API exception: ${e.message}")
-                isNetworkError = true
-                attempt++
-                if (attempt < 4) {
-                    kotlinx.coroutines.delay(backoffMs)
-                    backoffMs *= 2
-                    if (attempt == 2) {
-                        modelToUse = if (cleanModel == "gemini-1.5-flash") "gemini-2.0-flash" else "gemini-1.5-flash"
+
+                    val request = Request.Builder()
+                        .url(url)
+                        .post(bodyJson.toString().toRequestBody("application/json".toMediaType()))
+                        .build()
+
+                    val callResp = okHttpClient.newCall(request).execute()
+                    lastErrorCode = callResp.code
+
+                    if (callResp.isSuccessful) {
+                        response = callResp
+                        break // Success!
                     }
+
+                    // Log response code and error body copy using peekBody
+                    try {
+                        val errBody = callResp.peekBody(4096).string()
+                        Log.e("GeminiLiveService", "API Error Response ($cleanModel, min=$useMinimalist): ${callResp.code} - $errBody")
+                    } catch (pe: Exception) {
+                        Log.e("GeminiLiveService", "API Error Response ($cleanModel): ${callResp.code}")
+                    }
+
+                    callResp.close()
+
+                    // If 401, 403, key is invalid, do not retry
+                    if (callResp.code in 401..403) {
+                        break
+                    }
+                } catch (e: Exception) {
+                    Log.e("GeminiLiveService", "API call failed with exception: ${e.message}", e)
+                    onDiagnosticLog("Chat API exception ($cleanModel): ${e.message}")
+                    isNetworkError = true
                 }
+            }
+
+            if (response != null && response.isSuccessful) {
+                break
+            }
+            if (lastErrorCode in 401..403) {
+                break
             }
         }
 
