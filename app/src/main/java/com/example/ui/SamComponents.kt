@@ -866,7 +866,7 @@ fun SettingsDialog(
 
                 OutlinedButton(
                     onClick = { onOpenVoiceEnrollment() },
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = MaterialTheme.colorScheme.primary
                     ),
@@ -918,7 +918,7 @@ fun SettingsDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "Default Model: gemini-3.8-flash\nVoice Profile: Aoede (Expressive & Natural)",
+                    text = "Default Model: gemini-2.0-flash\nVoice Profile: Aoede (Expressive & Natural)",
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontSize = 11.sp,
                         color = SamPurpleSecondary

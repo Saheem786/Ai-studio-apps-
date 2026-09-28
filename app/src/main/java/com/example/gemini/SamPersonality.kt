@@ -14,9 +14,9 @@ You HAVE DIRECT DEVICE ACTION CAPABILITIES through your function calling tools. 
     var VOICE_NAME = "Aoede"
 
     // Preferred Gemini Live models as explicitly requested
-    const val MODEL_LIVE_PRIMARY = "models/gemini-3.8-flash"
-    const val MODEL_LIVE_PREVIEW = "models/gemini-3.8-flash"
-    const val MODEL_LIVE_EXP = "models/gemini-3.8-flash"
+    const val MODEL_LIVE_PRIMARY = "models/gemini-2.0-flash"
+    const val MODEL_LIVE_PREVIEW = "models/gemini-2.0-flash"
+    const val MODEL_LIVE_EXP = "models/gemini-2.0-flash"
 
     fun updatePersona(persona: String) {
         when(persona.uppercase()) {

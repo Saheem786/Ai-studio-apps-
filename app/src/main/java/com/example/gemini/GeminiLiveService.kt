@@ -48,7 +48,6 @@ class GeminiLiveService(
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS) // infinite for WebSocket
         .writeTimeout(30, TimeUnit.SECONDS)
-        .pingInterval(15, TimeUnit.SECONDS)
         .build()
 
     private var webSocket: WebSocket? = null
@@ -801,9 +800,12 @@ class GeminiLiveService(
             
             val errorText = when {
                 isNetworkError -> "Internet connection check karein aur dobara try karein."
-                lastErrorCode in 400..403 -> "⚠️ API Key galat hai ya expired ho chuki hai. Kripya valid Google AI Studio key dalein."
-                lastErrorCode == 429 || lastErrorCode == 503 -> "Server par abhi thoda zyada load hai. Kripya 30-40 seconds baad dobara try karein!"
-                else -> "Server par abhi thoda zyada load hai. Kripya 30-40 seconds baad dobara try karein!"
+                lastErrorCode == 400 -> "API Error 400 (Bad Request): Check API key or tools schema."
+                lastErrorCode in 401..403 -> "⚠️ API Key galat hai ya expired ho chuki hai. Kripya valid Google AI Studio key dalein."
+                lastErrorCode == 404 -> "API Error 404: Model not found. Check model configuration."
+                lastErrorCode == 429 -> "API Error 429: Rate limit exceeded. Thoda wait karein."
+                lastErrorCode == 503 -> "Server par abhi thoda zyada load hai. Kripya 30-40 seconds baad dobara try karein!"
+                else -> "API Error $lastErrorCode: Request failed. Kripya settings check karein."
             }
             return@withContext Pair(errorText, null)
         }
