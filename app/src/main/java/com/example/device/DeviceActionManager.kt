@@ -42,6 +42,47 @@ class DeviceActionManager(private val context: Context) {
             .replace(Regex("(?i)\\s*(kholo|chalao|open karo|launch karo)$"), "")
             .trim()
 
+        // Intercept YouTube Search & Play queries
+        if (cleanName.contains("youtube") && cleanName.length > 7) {
+            val query = cleanName
+                .replace("youtube", "")
+                .replace("par", "")
+                .replace("pe", "")
+                .replace("play", "")
+                .replace("search", "")
+                .replace("karo", "")
+                .replace("chalao", "")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+            
+            if (query.isNotEmpty()) {
+                Log.d(TAG, "Intercepted YouTube query: '$query'")
+                return try {
+                    val appIntent = Intent(Intent.ACTION_SEARCH).apply {
+                        setPackage("com.google.android.youtube")
+                        putExtra("query", query)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(appIntent)
+                    true
+                } catch (e: Exception) {
+                    try {
+                        val encodedQuery = java.net.URLEncoder.encode(query, "UTF-8")
+                        val webIntent = Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse("https://www.youtube.com/results?search_query=$encodedQuery")
+                        ).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(webIntent)
+                        true
+                    } catch (err: Exception) {
+                        false
+                    }
+                }
+            }
+        }
+
         val packageMap = mapOf(
             "youtube" to "com.google.android.youtube",
             "whatsapp" to "com.whatsapp",

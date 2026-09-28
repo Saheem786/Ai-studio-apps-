@@ -7,6 +7,8 @@ import android.media.AudioManager
 import android.os.BatteryManager
 import android.provider.AlarmClock
 import android.util.Log
+import android.net.Uri
+import java.net.URLEncoder
 
 class DeviceSystemManager(private val context: Context) {
 
@@ -138,6 +140,34 @@ class DeviceSystemManager(private val context: Context) {
         } catch (e: Exception) {
             Log.e("DeviceSystemManager", "Phone call intent error", e)
             false
+        }
+    }
+
+    fun searchAndPlayYouTube(query: String): String {
+        return try {
+            // Attempt 1: Direct YouTube app search intent
+            val appIntent = Intent(Intent.ACTION_SEARCH).apply {
+                setPackage("com.google.android.youtube")
+                putExtra("query", query)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(appIntent)
+            "YouTube par '$query' play kar diya hai!"
+        } catch (e: Exception) {
+            // Fallback: Direct YouTube web/deep-link URL intent
+            try {
+                val encodedQuery = URLEncoder.encode(query, "UTF-8")
+                val webIntent = Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse("https://www.youtube.com/results?search_query=$encodedQuery")
+                ).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(webIntent)
+                "YouTube par '$query' search kar diya hai!"
+            } catch (err: Exception) {
+                "Error playing YouTube video: ${err.message}"
+            }
         }
     }
 }

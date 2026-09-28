@@ -79,35 +79,33 @@ class TextToSpeechEngine(
     private fun configureLocaleAndVoice() {
         val currentTts = tts ?: return
 
-        // Prefer English (India) or Hindi or default locale or US English
-        val candidateLocales = listOf(
-            Locale("en", "IN"),
-            Locale("hi", "IN"),
-            Locale.getDefault(),
-            Locale.US,
-            Locale.UK
-        )
-
-        var selectedLocale = Locale.US
-        for (candidate in candidateLocales) {
-            val availability = currentTts.isLanguageAvailable(candidate)
-            if (availability >= TextToSpeech.LANG_AVAILABLE) {
-                selectedLocale = candidate
-                break
-            }
-        }
-
-        val result = currentTts.setLanguage(selectedLocale)
+        val indianLocale = Locale("en", "IN")
+        val result = currentTts.setLanguage(indianLocale)
         if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-            Log.w(TAG, "Locale $selectedLocale not supported, falling back to US English")
+            Log.w(TAG, "en-IN Locale not fully supported, falling back to US English locale detection")
             currentTts.setLanguage(Locale.US)
-            onDiagnosticLog("TTS Language set to US English fallback")
-        } else {
-            onDiagnosticLog("TTS Language set to: ${selectedLocale.displayName} (${selectedLocale.toLanguageTag()})")
         }
 
-        currentTts.setPitch(1.02f)
-        currentTts.setSpeechRate(1.0f)
+        // Try to assign a high-quality Indian English or Hindi voice
+        try {
+            val indianVoice = currentTts.voices?.firstOrNull { voice ->
+                (voice.locale.language == "en" && voice.locale.country == "IN") && !voice.isNetworkConnectionRequired
+            } ?: currentTts.voices?.firstOrNull { voice ->
+                voice.locale.language == "en" && voice.locale.country == "IN"
+            } ?: currentTts.voices?.firstOrNull { voice ->
+                voice.locale.language == "hi" && voice.locale.country == "IN"
+            }
+
+            indianVoice?.let {
+                currentTts.voice = it
+                onDiagnosticLog("Assigned high-quality Indian accent voice: ${it.name}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to apply custom Indian voice to TTS", e)
+        }
+
+        currentTts.setPitch(1.0f)
+        currentTts.setSpeechRate(1.02f)
     }
 
     private fun setupUtteranceListener() {
@@ -252,6 +250,9 @@ class TextToSpeechEngine(
             .replace(Regex("(?m)^#+\\s*"), "")
             .replace(Regex("https?://\\S+"), "link")
             .replace(Regex("[\uD83C-\uDBFF\uDC00-\uDFFF]+"), "") // Filter high-surrogate emojis
+            .replace("*", "")
+            .replace("#", "")
+            .replace("`", "")
             .trim()
     }
 
