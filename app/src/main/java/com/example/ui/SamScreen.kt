@@ -410,6 +410,8 @@ fun SamScreen(
             onClearVoiceClicked = { viewModel.clearVoiceMatch() },
             floatingWidgetEnabled = uiState.floatingWidgetEnabled,
             onFloatingWidgetEnabledChanged = { enabled -> viewModel.toggleFloatingWidget(enabled) },
+            wakeWordEnabled = uiState.wakeWordEnabled,
+            onWakeWordEnabledChanged = { enabled -> viewModel.toggleWakeWord(enabled) },
             currentThemeAccent = uiState.themeAccent,
             onThemeAccentChanged = { accent -> viewModel.changeThemeAccent(accent) },
             onOpenFullThemeSettings = {
@@ -509,10 +511,41 @@ fun SamScreen(
                     "Videos" -> {
                         viewModel.toggleVideoDurationDialog(true)
                     }
+                    "Avatar" -> {
+                        viewModel.toggleToolsSheet(false)
+                        viewModel.toggleAvatarPersonaDialog(true)
+                    }
+                    "Music" -> {
+                        viewModel.toggleToolsSheet(false)
+                        viewModel.toggleMusicStudioDialog(true)
+                    }
                     else -> {
                         Toast.makeText(context, "$toolName triggered!", Toast.LENGTH_SHORT).show()
                     }
                 }
+            }
+        )
+    }
+
+    // Avatar Persona Selection Dialog
+    if (uiState.showAvatarPersonaDialog) {
+        AvatarPersonaDialog(
+            currentPersona = uiState.currentPersona,
+            onDismiss = { viewModel.toggleAvatarPersonaDialog(false) },
+            onConfirm = { persona ->
+                viewModel.setPersona(persona)
+                Toast.makeText(context, "Persona set to $persona", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+
+    // AI Music Studio Dialog
+    if (uiState.showMusicStudioDialog) {
+        MusicStudioDialog(
+            onDismiss = { viewModel.toggleMusicStudioDialog(false) },
+            onGenerate = { genre, tempo ->
+                viewModel.generateAITrack(genre, tempo)
+                Toast.makeText(context, "Generating custom $genre track...", Toast.LENGTH_SHORT).show()
             }
         )
     }

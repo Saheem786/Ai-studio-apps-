@@ -45,5 +45,8 @@ class MainActivity : ComponentActivity() {
         if (intent?.getBooleanExtra("trigger_listening", false) == true) {
             viewModelInstance?.startSession()
         }
+        if (intent?.getBooleanExtra("trigger_morning_briefing", false) == true) {
+            viewModelInstance?.deliverMorningBriefing()
+        }
     }
 }

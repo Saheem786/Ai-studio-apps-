@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -79,7 +80,11 @@ data class SamUiState(
     val selectedVideoDuration: String? = null,
     val isImageGenActive: Boolean = false,
     val isVideoGenActive: Boolean = false,
-    val showVideoDurationDialog: Boolean = false
+    val showVideoDurationDialog: Boolean = false,
+    val showAvatarPersonaDialog: Boolean = false,
+    val currentPersona: String = "SAM",
+    val showMusicStudioDialog: Boolean = false,
+    val wakeWordEnabled: Boolean = false
 )
 
 class SamViewModel(application: Application) : AndroidViewModel(application) {
@@ -87,8 +92,10 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(SamUiState())
     val uiState: StateFlow<SamUiState> = _uiState.asStateFlow()
 
-    private val deviceActionManager = DeviceActionManager(application.applicationContext)
+     private val deviceActionManager = DeviceActionManager(application.applicationContext)
     private val deviceSystemManager = com.example.system.DeviceSystemManager(application.applicationContext)
+    private val calendarReminderManager = com.example.system.CalendarReminderManager(application.applicationContext)
+    private val mediaMusicManager = com.example.system.MediaMusicManager(application.applicationContext)
     private val voiceMatchManager = com.example.audio.VoiceMatchManager(application.applicationContext)
     private val timeFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
 
@@ -152,6 +159,8 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
         val isEnrolled = voiceMatchManager.isVoiceEnrolled()
         val isEnforced = prefs.getBoolean("voice_match_enforced", false)
         val isFloatingWidgetOn = prefs.getBoolean("floating_widget_enabled", false)
+        val isWakeWordOn = prefs.getBoolean("wake_word_enabled", false)
+        val savedPersona = prefs.getString("current_persona", "SAM") ?: "SAM"
 
         val savedThemeStr = prefs.getString("theme_accent", "CLASSIC") ?: "CLASSIC"
         val themeAccent = try {
@@ -160,6 +169,9 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
             AppThemeAccent.CLASSIC
         }
 
+        // Apply selected persona directly to static instructions
+        com.example.gemini.SamPersonality.updatePersona(savedPersona)
+
         _uiState.update { 
             it.copy(
                 apiKey = initialKey, 
@@ -167,7 +179,9 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                 isVoiceCalibrationCompleted = isEnrolled,
                 voiceMatchEnforced = isEnforced && isEnrolled,
                 floatingWidgetEnabled = isFloatingWidgetOn,
-                themeAccent = themeAccent
+                themeAccent = themeAccent,
+                wakeWordEnabled = isWakeWordOn,
+                currentPersona = savedPersona
             ) 
         }
 
@@ -177,6 +191,32 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
             addLog("Loaded Gemini API key from storage (${initialKey.take(4)}...${initialKey.takeLast(4)})")
         }
         addLog("Room Database initialized: chat history loaded")
+
+        // Start Wake Word Background Service if enabled
+        if (isWakeWordOn) {
+            val context = application.applicationContext
+            val serviceIntent = Intent(context, com.example.audio.SamWakeWordService::class.java)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(serviceIntent)
+                } else {
+                    context.startService(serviceIntent)
+                }
+                addLog("Background Wake Word Listener service started on application init")
+            } catch (e: Exception) {
+                Log.e("SamViewModel", "Failed to start wake word service on init", e)
+            }
+        }
+
+        // Deliver Morning Briefing if pending
+        val hasPendingBriefing = prefs.getBoolean("pending_morning_briefing", false)
+        if (hasPendingBriefing) {
+            prefs.edit().putBoolean("pending_morning_briefing", false).apply()
+            viewModelScope.launch {
+                delay(2500) // allow TTS and database to finish warming up
+                deliverMorningBriefing()
+            }
+        }
     }
 
     private fun addLog(message: String) {
@@ -693,6 +733,89 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
 
+                "scheduleCalendarEvent" -> {
+                    val title = args["title"]?.toString() ?: "New Event"
+                    val time = (args["time"] as? Number)?.toLong() ?: System.currentTimeMillis()
+                    val duration = (args["duration"] as? Number)?.toInt() ?: 60
+                    val notes = args["notes"]?.toString() ?: "Created by Sam AI"
+
+                    val ok = calendarReminderManager.scheduleEvent(title, time, duration, notes)
+                    val resultMsg = if (ok) "Successfully scheduled event '$title'" else "Could not schedule event"
+                    _uiState.update { it.copy(actionBanner = resultMsg) }
+                    geminiService?.sendToolResponse(
+                        callId,
+                        name,
+                        mapOf("success" to ok, "message" to resultMsg)
+                    )
+                    chatRepository.saveMessage(
+                        ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = "Maine aapke calendar mein event schedule kar diya hai: **$title** 📅",
+                            isAction = true,
+                            actionName = "scheduleCalendarEvent",
+                            actionDetail = resultMsg
+                        )
+                    )
+                }
+
+                "checkSchedule" -> {
+                    val events = calendarReminderManager.getTodayEvents()
+                    val resultMsg = "Retrieved today's schedule successfully"
+                    _uiState.update { it.copy(actionBanner = resultMsg) }
+                    geminiService?.sendToolResponse(
+                        callId,
+                        name,
+                        mapOf("success" to true, "events" to events)
+                    )
+                    chatRepository.saveMessage(
+                        ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = "Aapka aaj ka schedule 📅:\n" + events.joinToString("\n")
+                        )
+                    )
+                }
+
+                "playSong" -> {
+                    val songName = args["songName"]?.toString() ?: ""
+                    val app = args["app"]?.toString() ?: "spotify"
+                    val ok = mediaMusicManager.playMusic(songName, app)
+                    val resultMsg = if (ok) "Playing song '$songName' on $app" else "Failed to play song"
+                    _uiState.update { it.copy(actionBanner = resultMsg) }
+                    geminiService?.sendToolResponse(
+                        callId,
+                        name,
+                        mapOf("success" to ok, "message" to resultMsg)
+                    )
+                    chatRepository.saveMessage(
+                        ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = "$app par gaana baj raha hai: **$songName** 🎵",
+                            isAction = true,
+                            actionName = "playSong",
+                            actionDetail = resultMsg
+                        )
+                    )
+                }
+
+                "controlPlayback" -> {
+                    val action = args["action"]?.toString() ?: "PLAY"
+                    val keyCode = when(action.uppercase()) {
+                        "PAUSE" -> android.view.KeyEvent.KEYCODE_MEDIA_PAUSE
+                        "NEXT" -> android.view.KeyEvent.KEYCODE_MEDIA_NEXT
+                        "PREVIOUS" -> android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS
+                        else -> android.view.KeyEvent.KEYCODE_MEDIA_PLAY
+                    }
+                    val ok = mediaMusicManager.dispatchMediaKey(keyCode)
+                    val resultMsg = "Dispatched playback action: $action"
+                    _uiState.update { it.copy(actionBanner = resultMsg) }
+                    geminiService?.sendToolResponse(
+                        callId,
+                        name,
+                        mapOf("success" to ok, "message" to resultMsg)
+                    )
+                    addLog("Playback action dispatched: $action (Success: $ok)")
+                }
+
                 else -> {
                     geminiService?.sendToolResponse(
                         callId,
@@ -1161,6 +1284,118 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearLogs() {
         _uiState.update { it.copy(diagnosticLogs = emptyList()) }
+    }
+
+    fun toggleWakeWord(enabled: Boolean) {
+        val context = getApplication<Application>().applicationContext
+        val prefs = context.getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("wake_word_enabled", enabled).apply()
+        _uiState.update { it.copy(wakeWordEnabled = enabled) }
+
+        val serviceIntent = Intent(context, com.example.audio.SamWakeWordService::class.java)
+        try {
+            if (enabled) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(serviceIntent)
+                } else {
+                    context.startService(serviceIntent)
+                }
+                addLog("Background 'Hey Sam' wake word listener service started.")
+            } else {
+                context.stopService(serviceIntent)
+                addLog("Background 'Hey Sam' wake word listener service stopped.")
+            }
+        } catch (e: Exception) {
+            Log.e("SamViewModel", "Error toggling wake word service", e)
+        }
+    }
+
+    fun toggleAvatarPersonaDialog(show: Boolean) {
+        _uiState.update { it.copy(showAvatarPersonaDialog = show) }
+    }
+
+    fun setPersona(persona: String) {
+        val context = getApplication<Application>().applicationContext
+        val prefs = context.getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("current_persona", persona).apply()
+        com.example.gemini.SamPersonality.updatePersona(persona)
+        _uiState.update { it.copy(currentPersona = persona, showAvatarPersonaDialog = false) }
+        addLog("Sam Persona changed to: $persona")
+    }
+
+    fun toggleMusicStudioDialog(show: Boolean) {
+        _uiState.update { it.copy(showMusicStudioDialog = show) }
+    }
+
+    fun generateAITrack(genre: String, tempo: Int) {
+        _uiState.update { it.copy(showMusicStudioDialog = false, isSendingChat = true) }
+        viewModelScope.launch {
+            delay(1500) // Simulated synthesis delay
+            val trackTitle = "Neon Dreams (AI $genre Edition)"
+            
+            val markdownContent = """
+# 🎵 AI Music Studio Production Sheets
+### Track: "$trackTitle" | Genre: $genre | Tempo: $tempo BPM
+
+#### 🎼 Recommended Chord Progressions
+- **Verse**: [ Cmaj7  | Am7 | Dm7 | G13 ] x2
+- **Chorus**: [ Fmaj7 | Em7 | Dm7 | Cmaj7 ] x4
+- **Outro**: [ Dm7 | Em7 | Fmaj7 | G13 | Cmaj7 ]
+
+#### 📝 Custom AI Generated Lyrics
+*(Verse 1)*
+Under the neon glare, we walk on empty streets,
+No destination in sight, just the rhythm of our beats,
+Analog signals fading, cybernetic skies so clear,
+I feel your frequency rising, drawing me so near.
+
+*(Chorus)*
+And we dream in Lofi shades of blue,
+Where the waves wash over you,
+In the synthwave echo of the night,
+Everything is gonna be alright.
+
+*(Outro)*
+Analog dreams, digital rain...
+We dissolve the pain...
+$tempo beats per minute, fading out...
+            """.trimIndent()
+
+            openCanvas(
+                title = trackTitle,
+                contentType = "Markdown",
+                content = markdownContent
+            )
+
+            val trackMsg = ChatMessage(
+                sender = MessageSender.ASSISTANT,
+                text = "Maine $genre style mein $tempo BPM par ek custom song sheet compose kar diya hai! 🎶 Iski lyrics, chord progression aur arrangement details main Canvas boards par pin kar diya hai."
+            )
+            chatRepository.saveMessage(trackMsg)
+            _uiState.update { it.copy(isSendingChat = false) }
+            addLog("Successfully generated AI track concept: $trackTitle ($tempo BPM)")
+        }
+    }
+
+    fun deliverMorningBriefing() {
+        val batteryStatus = deviceSystemManager.getBatteryInfo()
+        val events = calendarReminderManager.getTodayEvents()
+        val count = events.filter { it.startsWith("- ") }.size
+        
+        val briefingText = "Good morning Sir! Battery is at ${batteryStatus.filter { it.isDigit() }.ifEmpty { "100" }}%. You have $count calendar events scheduled today. All systems are operational."
+        
+        addLog("Delivering Daily Routine Morning Briefing: $briefingText")
+        
+        // Append briefing to Chat Log so the user sees it in their feed
+        val briefingMsg = ChatMessage(
+            sender = MessageSender.ASSISTANT,
+            text = "🌅 **DAILY MORNING BRIEFING**\n\n$briefingText\n\n**Schedule Events Today:**\n" + events.joinToString("\n")
+        )
+        viewModelScope.launch {
+            chatRepository.saveMessage(briefingMsg)
+            // Speak it out loud via TTS engine
+            ttsEngine?.speak(briefingText)
+        }
     }
 
     fun setAppMode(mode: AppMode) {

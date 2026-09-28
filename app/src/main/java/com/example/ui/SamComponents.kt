@@ -573,6 +573,8 @@ fun SettingsDialog(
     onClearVoiceClicked: () -> Unit,
     floatingWidgetEnabled: Boolean,
     onFloatingWidgetEnabledChanged: (Boolean) -> Unit,
+    wakeWordEnabled: Boolean,
+    onWakeWordEnabledChanged: (Boolean) -> Unit,
     currentThemeAccent: AppThemeAccent,
     onThemeAccentChanged: (AppThemeAccent) -> Unit,
     onOpenFullThemeSettings: () -> Unit,
@@ -761,6 +763,53 @@ fun SettingsDialog(
                             uncheckedThumbColor = SamTextMuted,
                             uncheckedTrackColor = SamSurface
                         )
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Wake Word continuous listener switch
+                Text(
+                    text = "Hands-Free Wake Word",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = SamCyan
+                    )
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Hands-Free 'Hey Sam'",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                color = SamTextPrimary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        )
+                        Text(
+                            text = "Background continuous keyword listener",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 11.sp,
+                                color = SamTextMuted
+                            )
+                        )
+                    }
+
+                    Switch(
+                        checked = wakeWordEnabled,
+                        onCheckedChange = { onWakeWordEnabledChanged(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = SamDarkBg,
+                            checkedTrackColor = SamCyan,
+                            uncheckedThumbColor = SamTextMuted,
+                            uncheckedTrackColor = SamSurface
+                        ),
+                        modifier = Modifier.testTag("wake_word_toggle")
                     )
                 }
 

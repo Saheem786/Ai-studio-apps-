@@ -601,6 +601,72 @@ class GeminiLiveService(
                 })
             })
 
+            funcs.put(JSONObject().apply {
+                put("name", "scheduleCalendarEvent")
+                put("description", "Schedule an event in the device calendar with a title, startTimeInMillis, and durationMinutes")
+                put("parameters", JSONObject().apply {
+                    put("type", "OBJECT")
+                    put("properties", JSONObject().apply {
+                        put("title", JSONObject().apply {
+                            put("type", "STRING")
+                            put("description", "The title of the calendar event")
+                        })
+                        put("time", JSONObject().apply {
+                            put("type", "INTEGER")
+                            put("description", "The start time of the event in milliseconds from epoch")
+                        })
+                        put("duration", JSONObject().apply {
+                            put("type", "INTEGER")
+                            put("description", "The duration of the event in minutes")
+                        })
+                        put("notes", JSONObject().apply {
+                            put("type", "STRING")
+                            put("description", "Additional description or notes for the event")
+                        })
+                    })
+                    put("required", JSONArray().put("title").put("time").put("duration"))
+                })
+            })
+
+            funcs.put(JSONObject().apply {
+                put("name", "checkSchedule")
+                put("description", "Check today's scheduled calendar events")
+            })
+
+            funcs.put(JSONObject().apply {
+                put("name", "playSong")
+                put("description", "Play a song using Spotify or YouTube Music")
+                put("parameters", JSONObject().apply {
+                    put("type", "OBJECT")
+                    put("properties", JSONObject().apply {
+                        put("songName", JSONObject().apply {
+                            put("type", "STRING")
+                            put("description", "Name of the song or query to search for")
+                        })
+                        put("app", JSONObject().apply {
+                            put("type", "STRING")
+                            put("description", "The streaming service name (e.g., spotify or youtube)")
+                        })
+                    })
+                    put("required", JSONArray().put("songName").put("app"))
+                })
+            })
+
+            funcs.put(JSONObject().apply {
+                put("name", "controlPlayback")
+                put("description", "Control media playback like play, pause, next, or skip")
+                put("parameters", JSONObject().apply {
+                    put("type", "OBJECT")
+                    put("properties", JSONObject().apply {
+                        put("action", JSONObject().apply {
+                            put("type", "STRING")
+                            put("description", "Playback action: PLAY, PAUSE, NEXT, or PREVIOUS")
+                        })
+                    })
+                    put("required", JSONArray().put("action"))
+                })
+            })
+
             put("functionDeclarations", funcs)
         })
     }
