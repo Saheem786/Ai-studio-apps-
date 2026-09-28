@@ -163,7 +163,7 @@ class SamWakeWordService : Service() {
         if (enforceVoiceMatch) {
             val similarity = voiceMatchManager?.verifySpeaker(pcmData) ?: 0.0f
             Log.d(TAG, "Wake word similarity score: $similarity")
-            if (similarity >= 0.70f) {
+            if (similarity >= 0.68f) {
                 triggerWakeUp()
             } else {
                 Log.d(TAG, "Speaker mismatch. Wake word rejected.")

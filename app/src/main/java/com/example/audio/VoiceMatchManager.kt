@@ -27,7 +27,7 @@ class VoiceMatchManager(private val context: Context) {
     fun clearEnrolledVoice() {
         masterVoiceprint = null
         try {
-            val file = File(context.filesDir, FILE_NAME)
+            val file = context.filesDir.resolve(FILE_NAME)
             if (file.exists()) {
                 file.delete()
             }
@@ -38,7 +38,7 @@ class VoiceMatchManager(private val context: Context) {
 
     private fun loadVoiceprint() {
         try {
-            val file = File(context.filesDir, FILE_NAME)
+            val file = context.filesDir.resolve(FILE_NAME)
             if (file.exists()) {
                 val bytes = file.readBytes()
                 if (bytes.size == VECTOR_SIZE * 4) {
@@ -51,7 +51,7 @@ class VoiceMatchManager(private val context: Context) {
                         floatArray[i] = Float.fromBits(intBits)
                     }
                     masterVoiceprint = floatArray
-                    Log.i(TAG, "Loaded voiceprint successfully: ${floatArray.joinToString()}")
+                    Log.i(TAG, "Loaded voiceprint successfully from $file: ${floatArray.joinToString()}")
                 }
             }
         } catch (e: Exception) {
@@ -61,7 +61,7 @@ class VoiceMatchManager(private val context: Context) {
 
     private fun saveVoiceprint(vector: FloatArray) {
         try {
-            val file = File(context.filesDir, FILE_NAME)
+            val file = context.filesDir.resolve(FILE_NAME)
             val bytes = ByteArray(VECTOR_SIZE * 4)
             for (i in 0 until VECTOR_SIZE) {
                 val bits = vector[i].toRawBits()
@@ -72,7 +72,7 @@ class VoiceMatchManager(private val context: Context) {
             }
             file.writeBytes(bytes)
             masterVoiceprint = vector
-            Log.i(TAG, "Saved voiceprint successfully: ${vector.joinToString()}")
+            Log.i(TAG, "Saved voiceprint successfully to $file: ${vector.joinToString()}")
         } catch (e: Exception) {
             Log.e(TAG, "Error saving voiceprint", e)
         }
@@ -182,9 +182,9 @@ class VoiceMatchManager(private val context: Context) {
             normB += current[i] * current[i]
         }
 
-        if (normA == 0.0f || normB == 0.0f) return 0.0f
-
-        val similarity = dotProduct / (sqrt(normA) * sqrt(normB))
+        // Add an epsilon (1e-6f) to prevent NaN/zero-division errors
+        val denominator = sqrt(normA + 1e-6f) * sqrt(normB + 1e-6f)
+        val similarity = dotProduct / denominator
         Log.d(TAG, "Speaker verification score: $similarity")
         return similarity.coerceIn(0.0f, 1.0f)
     }

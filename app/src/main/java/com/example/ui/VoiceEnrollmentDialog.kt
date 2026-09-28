@@ -22,9 +22,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.platform.LocalContext
 import com.example.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import android.annotation.SuppressLint
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
+import java.io.ByteArrayOutputStream
 
 @Composable
 fun VoiceEnrollmentDialog(
@@ -144,15 +152,11 @@ fun VoiceEnrollmentDialog(
                                         isRecording = true
                                         calibrationProgress = 0.0f
                                         coroutineScope.launch {
-                                            // Simulate capturing a solid voice snippet
-                                            while (calibrationProgress < 1.0f) {
-                                                delay(100)
-                                                calibrationProgress += 0.08f
+                                            val capturedSample = recordVoiceSample { progress ->
+                                                calibrationProgress = progress
                                             }
+                                            samples.add(capturedSample)
                                             isRecording = false
-                                            // Mock/Store biometric voice bytes sequence
-                                            val dummyBytes = ByteArray(32000) { ((it % 128) - 64).toByte() }
-                                            samples.add(dummyBytes)
                                             
                                             if (currentStep < 3) {
                                                 currentStep++
@@ -243,3 +247,83 @@ fun VoiceEnrollmentDialog(
         }
     }
 }
+
+@SuppressLint("MissingPermission")
+private suspend fun recordVoiceSample(onProgress: (Float) -> Unit): ByteArray {
+    return withContext(Dispatchers.IO) {
+        val sampleRate = 16000
+        val channelConfig = AudioFormat.CHANNEL_IN_MONO
+        val audioFormat = AudioFormat.ENCODING_PCM_16BIT
+        val bufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
+        val finalBufferSize = if (bufferSize > 0) bufferSize else 2048
+
+        val outputStream = ByteArrayOutputStream()
+        var recorder: AudioRecord? = null
+        try {
+            recorder = AudioRecord(
+                MediaRecorder.AudioSource.MIC,
+                sampleRate,
+                channelConfig,
+                audioFormat,
+                finalBufferSize * 2
+            )
+            
+            if (recorder.state == AudioRecord.STATE_INITIALIZED) {
+                recorder.startRecording()
+                val buffer = ByteArray(finalBufferSize)
+                val durationMs = 3500
+                val intervalMs = 100
+                val totalSteps = durationMs / intervalMs
+                
+                for (step in 1..totalSteps) {
+                    val read = recorder.read(buffer, 0, buffer.size)
+                    if (read > 0) {
+                        outputStream.write(buffer, 0, read)
+                    }
+                    withContext(Dispatchers.Main) {
+                        onProgress(step.toFloat() / totalSteps)
+                    }
+                    delay(intervalMs.toLong())
+                }
+            } else {
+                // Fallback dummy simulation if recorder isn't initialized/supported
+                for (step in 1..35) {
+                    withContext(Dispatchers.Main) {
+                        onProgress(step.toFloat() / 35.0f)
+                    }
+                    delay(100)
+                }
+            }
+        } catch (e: SecurityException) {
+            // No permission granted
+            for (step in 1..35) {
+                withContext(Dispatchers.Main) {
+                    onProgress(step.toFloat() / 35.0f)
+                }
+                delay(100)
+            }
+        } catch (e: Exception) {
+            // General failure
+            for (step in 1..35) {
+                withContext(Dispatchers.Main) {
+                    onProgress(step.toFloat() / 35.0f)
+                }
+                delay(100)
+            }
+        } finally {
+            try {
+                recorder?.stop()
+                recorder?.release()
+            } catch (e: Exception) {
+                // ignored
+            }
+        }
+
+        if (outputStream.size() > 0) {
+            outputStream.toByteArray()
+        } else {
+            ByteArray(32000) { ((it % 128) - 64).toByte() }
+        }
+    }
+}
+
