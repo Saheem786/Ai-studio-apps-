@@ -152,9 +152,7 @@ fun ArushiScreen(
                 attachedImageBase64 = uiState.attachedImageBase64,
                 onRemoveAttachedImage = { viewModel.setAttachedImage(null) },
                 onOpenToolsSheet = {
-                    photoPickerLauncher.launch(
-                        PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly)
-                    )
+                    viewModel.toggleToolsSheet(true)
                 },
                 onConfigureQuickReplies = { viewModel.toggleQuickRepliesConfigDialog(true) },
                 onInputChanged = { viewModel.updateInputText(it) },
@@ -396,8 +394,24 @@ fun ArushiScreen(
     if (uiState.showSettingsDialog) {
         SettingsDialog(
             currentApiKey = uiState.apiKey,
+            voiceMatchEnforced = uiState.voiceMatchEnforced,
+            onVoiceMatchEnforcedChanged = { enabled -> viewModel.toggleVoiceMatchEnforced(enabled) },
+            isVoiceCalibrationCompleted = uiState.isVoiceCalibrationCompleted,
+            onCalibrateVoiceClicked = {
+                viewModel.toggleSettingsDialog(false)
+                viewModel.toggleVoiceEnrollmentDialog(true)
+            },
+            onClearVoiceClicked = { viewModel.clearVoiceMatch() },
             onSaveKey = { newKey -> viewModel.updateApiKey(newKey) },
             onDismiss = { viewModel.toggleSettingsDialog(false) }
+        )
+    }
+
+    // Voice Enrollment Calibration Dialog
+    if (uiState.showVoiceEnrollmentDialog) {
+        VoiceEnrollmentDialog(
+            onDismiss = { viewModel.toggleVoiceEnrollmentDialog(false) },
+            onEnrollComplete = { samples -> viewModel.completeVoiceEnrollment(samples) }
         )
     }
 
@@ -425,6 +439,61 @@ fun ArushiScreen(
             clipboard.setPrimaryClip(clip)
         }
     )
+
+    // Gemini Advanced Tools Drawer Bottom Sheet
+    if (uiState.showToolsSheet) {
+        GeminiAdvancedToolsSheet(
+            onDismiss = { viewModel.toggleToolsSheet(false) },
+            personalIntelligenceEnabled = uiState.personalIntelligenceEnabled,
+            onPersonalIntelligenceToggled = { enabled -> viewModel.togglePersonalIntelligence(enabled) },
+            onActionSelected = { toolName ->
+                viewModel.toggleToolsSheet(false) // Close sheet first
+                when (toolName) {
+                    "Photos" -> {
+                        photoPickerLauncher.launch(
+                            PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    }
+                    "Canvas" -> {
+                        viewModel.openCanvas(
+                            title = "Advanced Algorithm Optimization",
+                            contentType = "Kotlin",
+                            content = """
+                                // Optimized Fibonacci sequence using memoization in Kotlin
+                                fun fibonacciMemo(n: Int): Long {
+                                    val memo = HashMap<Int, Long>()
+                                    
+                                    fun solve(n: Int): Long {
+                                        if (n <= 1) return n.toLong()
+                                        if (memo.containsKey(n)) return memo[n]!!
+                                        
+                                        val ans = solve(n - 1) + solve(n - 2)
+                                        memo[n] = ans
+                                        return ans
+                                    }
+                                    
+                                    return solve(n)
+                                }
+                                
+                                fun main() {
+                                    val n = 45
+                                    println("Fibonacci of ${'$'}n is: ${'$'}{fibonacciMemo(n)}")
+                                }
+                            """.trimIndent()
+                        )
+                    }
+                    "Deep Research" -> {
+                        viewModel.setDeepResearchEnabled(!uiState.deepResearchEnabled)
+                        val status = if (!uiState.deepResearchEnabled) "ENABLED" else "DISABLED"
+                        Toast.makeText(context, "Deep Research $status!", Toast.LENGTH_SHORT).show()
+                    }
+                    else -> {
+                        Toast.makeText(context, "$toolName triggered!", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        )
+    }
 
     // Multiple Contacts Resolution Dialog
     uiState.multipleContacts?.let { contacts ->

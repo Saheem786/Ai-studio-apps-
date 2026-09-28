@@ -58,10 +58,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -561,6 +564,11 @@ fun MultipleContactsDialog(
 @Composable
 fun SettingsDialog(
     currentApiKey: String,
+    voiceMatchEnforced: Boolean,
+    onVoiceMatchEnforcedChanged: (Boolean) -> Unit,
+    isVoiceCalibrationCompleted: Boolean,
+    onCalibrateVoiceClicked: () -> Unit,
+    onClearVoiceClicked: () -> Unit,
     onSaveKey: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -621,6 +629,96 @@ fun SettingsDialog(
                         color = ArushiTextMuted
                     )
                 )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Voice matching section
+                Text(
+                    text = "Biometric Voice Security",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = ArushiCyan
+                    )
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Enforce Voice Match",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                color = ArushiTextPrimary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        )
+                        Text(
+                            text = if (isVoiceCalibrationCompleted) {
+                                "Execute actions only for enrolled owner voice"
+                            } else {
+                                "Calibrate voiceprint to enable matching restriction"
+                            },
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 11.sp,
+                                color = ArushiTextMuted
+                            )
+                        )
+                    }
+
+                    Switch(
+                        checked = voiceMatchEnforced && isVoiceCalibrationCompleted,
+                        onCheckedChange = { onVoiceMatchEnforcedChanged(it) },
+                        enabled = isVoiceCalibrationCompleted,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = ArushiDarkBg,
+                            checkedTrackColor = ArushiCyan,
+                            uncheckedThumbColor = ArushiTextMuted,
+                            uncheckedTrackColor = ArushiSurface
+                        )
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = onCalibrateVoiceClicked,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isVoiceCalibrationCompleted) ArushiSurface else ArushiPurplePrimary
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = if (isVoiceCalibrationCompleted) "Recalibrate" else "Enroll Voice",
+                            color = if (isVoiceCalibrationCompleted) ArushiTextPrimary else ArushiDarkBg,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    if (isVoiceCalibrationCompleted) {
+                        OutlinedButton(
+                            onClick = onClearVoiceClicked,
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = ArushiErrorRed),
+                            shape = RoundedCornerShape(8.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, ArushiErrorRed.copy(alpha = 0.5f)),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "Clear print",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(

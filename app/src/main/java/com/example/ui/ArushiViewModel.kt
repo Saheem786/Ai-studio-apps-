@@ -62,7 +62,12 @@ data class ArushiUiState(
     val canvasTitle: String = "",
     val canvasContent: String = "",
     val canvasContentType: String = "Code",
-    val showCanvas: Boolean = false
+    val showCanvas: Boolean = false,
+    val showToolsSheet: Boolean = false,
+    val personalIntelligenceEnabled: Boolean = true,
+    val voiceMatchEnforced: Boolean = false,
+    val isVoiceCalibrationCompleted: Boolean = false,
+    val showVoiceEnrollmentDialog: Boolean = false
 )
 
 class ArushiViewModel(application: Application) : AndroidViewModel(application) {
@@ -71,6 +76,8 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
     val uiState: StateFlow<ArushiUiState> = _uiState.asStateFlow()
 
     private val deviceActionManager = DeviceActionManager(application.applicationContext)
+    private val deviceSystemManager = com.example.system.DeviceSystemManager(application.applicationContext)
+    private val voiceMatchManager = com.example.audio.VoiceMatchManager(application.applicationContext)
     private val timeFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
 
     private val chatDatabase = AppDatabase.getInstance(application)
@@ -130,7 +137,17 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
             defaultQuickReplies
         }
 
-        _uiState.update { it.copy(apiKey = initialKey, quickReplies = replies) }
+        val isEnrolled = voiceMatchManager.isVoiceEnrolled()
+        val isEnforced = prefs.getBoolean("voice_match_enforced", false)
+
+        _uiState.update { 
+            it.copy(
+                apiKey = initialKey, 
+                quickReplies = replies,
+                isVoiceCalibrationCompleted = isEnrolled,
+                voiceMatchEnforced = isEnforced && isEnrolled
+            ) 
+        }
 
         initAudioSystem()
         geminiService?.setApiKey(initialKey)
@@ -196,7 +213,19 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
 
         micRecorder = MicrophoneRecorder(
             onAudioChunk = { base64Data, rawBytes ->
-                geminiService?.sendAudioChunk(base64Data)
+                var shouldStream = true
+                if (_uiState.value.voiceMatchEnforced && voiceMatchManager.isVoiceEnrolled()) {
+                    val score = voiceMatchManager.verifySpeaker(rawBytes)
+                    if (score < 0.78f) {
+                        shouldStream = false
+                        _uiState.update { it.copy(actionBanner = "Voice Mismatch: Unauthorized speaker") }
+                    } else {
+                        _uiState.update { it.copy(actionBanner = "Sam is listening...") }
+                    }
+                }
+                if (shouldStream) {
+                    geminiService?.sendAudioChunk(base64Data)
+                }
             },
             onAmplitudeChanged = { amp ->
                 if (_uiState.value.state == AssistantState.LISTENING) {
@@ -440,6 +469,98 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
                         }
                         else -> {}
                     }
+                }
+
+                "toggleFlashlight" -> {
+                    val enable = args["enable"] as? Boolean ?: true
+                    val ok = deviceSystemManager.toggleFlashlight(enable)
+                    val resultMsg = if (ok) {
+                        if (enable) "Flashlight turned on" else "Flashlight turned off"
+                    } else {
+                        "Failed to toggle flashlight"
+                    }
+                    _uiState.update { it.copy(actionBanner = resultMsg) }
+                    geminiService?.sendToolResponse(
+                        callId,
+                        name,
+                        mapOf("success" to ok, "message" to resultMsg)
+                    )
+                    chatRepository.saveMessage(
+                        ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = "$resultMsg 🔦",
+                            isAction = true,
+                            actionName = "toggleFlashlight",
+                            actionDetail = resultMsg
+                        )
+                    )
+                }
+
+                "adjustVolume" -> {
+                    val action = args["action"]?.toString() ?: "UP"
+                    val level = (args["level"] as? Number)?.toInt()
+                    val resultMsg = deviceSystemManager.adjustVolume(action, level)
+                    _uiState.update { it.copy(actionBanner = resultMsg) }
+                    geminiService?.sendToolResponse(
+                        callId,
+                        name,
+                        mapOf("success" to true, "message" to resultMsg)
+                    )
+                    chatRepository.saveMessage(
+                        ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = "$resultMsg 🔊",
+                            isAction = true,
+                            actionName = "adjustVolume",
+                            actionDetail = resultMsg
+                        )
+                    )
+                }
+
+                "getBatteryStatus" -> {
+                    val resultMsg = deviceSystemManager.getBatteryInfo()
+                    _uiState.update { it.copy(actionBanner = resultMsg) }
+                    geminiService?.sendToolResponse(
+                        callId,
+                        name,
+                        mapOf("success" to true, "message" to resultMsg)
+                    )
+                    chatRepository.saveMessage(
+                        ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = "$resultMsg 🔋",
+                            isAction = true,
+                            actionName = "getBatteryStatus",
+                            actionDetail = resultMsg
+                        )
+                    )
+                }
+
+                "setAlarm" -> {
+                    val hour = (args["hour"] as? Number)?.toInt() ?: 7
+                    val minute = (args["minute"] as? Number)?.toInt() ?: 0
+                    val label = args["label"]?.toString() ?: "Alarm"
+                    val ok = deviceSystemManager.setAlarm(hour, minute, label)
+                    val resultMsg = if (ok) {
+                        "Alarm successfully set for $hour:${String.format("%02d", minute)} ($label)"
+                    } else {
+                        "Could not trigger alarm activity"
+                    }
+                    _uiState.update { it.copy(actionBanner = resultMsg) }
+                    geminiService?.sendToolResponse(
+                        callId,
+                        name,
+                        mapOf("success" to ok, "message" to resultMsg)
+                    )
+                    chatRepository.saveMessage(
+                        ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = "$resultMsg ⏰",
+                            isAction = true,
+                            actionName = "setAlarm",
+                            actionDetail = resultMsg
+                        )
+                    )
                 }
 
                 else -> {
@@ -698,6 +819,57 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
 
     fun toggleSettingsDialog(show: Boolean) {
         _uiState.update { it.copy(showSettingsDialog = show) }
+    }
+
+    fun toggleToolsSheet(show: Boolean) {
+        _uiState.update { it.copy(showToolsSheet = show) }
+    }
+
+    fun togglePersonalIntelligence(enabled: Boolean) {
+        _uiState.update { it.copy(personalIntelligenceEnabled = enabled) }
+        addLog("Personal Intelligence setting set to: $enabled")
+    }
+
+    fun toggleVoiceMatchEnforced(enforced: Boolean) {
+        val prefs = getApplication<Application>().getSharedPreferences("arushi_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("voice_match_enforced", enforced).apply()
+        _uiState.update { it.copy(voiceMatchEnforced = enforced) }
+        addLog("Voice Match enforcement toggled to: $enforced")
+    }
+
+    fun toggleVoiceEnrollmentDialog(show: Boolean) {
+        _uiState.update { it.copy(showVoiceEnrollmentDialog = show) }
+    }
+
+    fun completeVoiceEnrollment(samples: List<ByteArray>) {
+        val ok = voiceMatchManager.enrollVoice(samples)
+        if (ok) {
+            val prefs = getApplication<Application>().getSharedPreferences("arushi_prefs", Context.MODE_PRIVATE)
+            prefs.edit().putBoolean("voice_match_enforced", true).apply()
+            _uiState.update { 
+                it.copy(
+                    isVoiceCalibrationCompleted = true,
+                    voiceMatchEnforced = true,
+                    showVoiceEnrollmentDialog = false
+                ) 
+            }
+            addLog("Voice Enrollment completed successfully. Voiceprint calibrated & active.")
+        } else {
+            addLog("Voice Enrollment failed due to poor acoustic sample calibration.")
+        }
+    }
+
+    fun clearVoiceMatch() {
+        voiceMatchManager.clearEnrolledVoice()
+        val prefs = getApplication<Application>().getSharedPreferences("arushi_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("voice_match_enforced", false).apply()
+        _uiState.update { 
+            it.copy(
+                isVoiceCalibrationCompleted = false,
+                voiceMatchEnforced = false
+            ) 
+        }
+        addLog("Cleared owner voiceprint signature. Voice Match enforcement disabled.")
     }
 
     fun clearLogs() {

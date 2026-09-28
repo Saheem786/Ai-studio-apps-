@@ -490,6 +490,68 @@ class GeminiLiveService(
                 })
             })
 
+            funcs.put(JSONObject().apply {
+                put("name", "toggleFlashlight")
+                put("description", "Toggle the device flashlight/torch mode on or off")
+                put("parameters", JSONObject().apply {
+                    put("type", "OBJECT")
+                    put("properties", JSONObject().apply {
+                        put("enable", JSONObject().apply {
+                            put("type", "BOOLEAN")
+                            put("description", "Set to true to turn on the flashlight, or false to turn it off")
+                        })
+                    })
+                    put("required", JSONArray().put("enable"))
+                })
+            })
+
+            funcs.put(JSONObject().apply {
+                put("name", "adjustVolume")
+                put("description", "Adjust or set the device system music volume")
+                put("parameters", JSONObject().apply {
+                    put("type", "OBJECT")
+                    put("properties", JSONObject().apply {
+                        put("action", JSONObject().apply {
+                            put("type", "STRING")
+                            put("description", "The volume adjustment action: UP, DOWN, MAX, MUTE, or SET")
+                        })
+                        put("level", JSONObject().apply {
+                            put("type", "INTEGER")
+                            put("description", "The level percentage from 0 to 100 (only required when action is SET)")
+                        })
+                    })
+                    put("required", JSONArray().put("action"))
+                })
+            })
+
+            funcs.put(JSONObject().apply {
+                put("name", "getBatteryStatus")
+                put("description", "Check the current battery status, charging state, and power level of the device")
+            })
+
+            funcs.put(JSONObject().apply {
+                put("name", "setAlarm")
+                put("description", "Set a custom system alarm at a specific hour and minute")
+                put("parameters", JSONObject().apply {
+                    put("type", "OBJECT")
+                    put("properties", JSONObject().apply {
+                        put("hour", JSONObject().apply {
+                            put("type", "INTEGER")
+                            put("description", "The alarm hour in 24-hour format (0-23)")
+                        })
+                        put("minute", JSONObject().apply {
+                            put("type", "INTEGER")
+                            put("description", "The alarm minute (0-59)")
+                        })
+                        put("label", JSONObject().apply {
+                            put("type", "STRING")
+                            put("description", "A text description/label for the alarm")
+                        })
+                    })
+                    put("required", JSONArray().put("hour").put("minute").put("label"))
+                })
+            })
+
             put("functionDeclarations", funcs)
         })
     }
@@ -650,6 +712,22 @@ class GeminiLiveService(
                                 "makeCall" -> {
                                     val number = argsMap["phoneNumber"]?.toString() ?: "Number"
                                     "$number par call mila diya hai. 📞"
+                                }
+                                "toggleFlashlight" -> {
+                                    val enable = argsMap["enable"] as? Boolean ?: true
+                                    if (enable) "Flashlight turned on! 🔦" else "Flashlight turned off! 🔦"
+                                }
+                                "adjustVolume" -> {
+                                    val action = argsMap["action"]?.toString() ?: "UP"
+                                    val level = (argsMap["level"] as? Number)?.toInt()
+                                    "Volume adjustment triggered: $action ($level%) 🔊"
+                                }
+                                "getBatteryStatus" -> "Checking current battery status... 🔋"
+                                "setAlarm" -> {
+                                    val hr = (argsMap["hour"] as? Number)?.toInt() ?: 7
+                                    val min = (argsMap["minute"] as? Number)?.toInt() ?: 0
+                                    val lbl = argsMap["label"]?.toString() ?: "Alarm"
+                                    "Alarm successfully set for $hr:$min ($lbl) ⏰"
                                 }
                                 else -> "Action $name execute kar diya hai."
                             }
