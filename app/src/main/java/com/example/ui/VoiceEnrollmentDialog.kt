@@ -58,11 +58,11 @@ fun VoiceEnrollmentDialog(
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = RoundedCornerShape(24.dp),
-            color = ArushiDarkBg,
+            color = SamDarkBg,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, ArushiSurfaceBorder)
+            border = androidx.compose.foundation.BorderStroke(1.dp, SamSurfaceBorder)
         ) {
             Column(
                 modifier = Modifier
@@ -80,14 +80,14 @@ fun VoiceEnrollmentDialog(
                         text = "Voice Calibration",
                         style = MaterialTheme.typography.titleMedium.copy(
                             fontWeight = FontWeight.Bold,
-                            color = ArushiTextPrimary
+                            color = SamTextPrimary
                         )
                     )
                     IconButton(onClick = onDismiss) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Cancel",
-                            tint = ArushiTextMuted
+                            tint = SamTextMuted
                         )
                     }
                 }
@@ -99,7 +99,7 @@ fun VoiceEnrollmentDialog(
                     Text(
                         text = "Step $currentStep of 3",
                         style = MaterialTheme.typography.labelMedium.copy(
-                            color = ArushiCyanGlow,
+                            color = SamCyanGlow,
                             fontWeight = FontWeight.Bold
                         )
                     )
@@ -109,7 +109,7 @@ fun VoiceEnrollmentDialog(
                     Text(
                         text = stepPrompts[currentStep - 1],
                         style = MaterialTheme.typography.bodyLarge.copy(
-                            color = ArushiTextPrimary,
+                            color = SamTextPrimary,
                             fontWeight = FontWeight.SemiBold,
                             textAlign = TextAlign.Center
                         ),
@@ -129,13 +129,13 @@ fun VoiceEnrollmentDialog(
                                     .size(100.dp)
                                     .scale(pulseScale)
                                     .clip(CircleShape)
-                                    .background(ArushiPurplePrimary.copy(alpha = 0.2f))
+                                    .background(SamPurplePrimary.copy(alpha = 0.2f))
                             )
                         }
 
                         Surface(
                             shape = CircleShape,
-                            color = if (isRecording) ArushiPurplePrimary else ArushiSurfaceElevated,
+                            color = if (isRecording) SamPurplePrimary else SamSurfaceElevated,
                             modifier = Modifier
                                 .size(80.dp)
                                 .clip(CircleShape)
@@ -168,7 +168,7 @@ fun VoiceEnrollmentDialog(
                                 Icon(
                                     imageVector = Icons.Default.Mic,
                                     contentDescription = "Speak Sample",
-                                    tint = if (isRecording) ArushiDarkBg else ArushiPurpleSecondary,
+                                    tint = if (isRecording) SamDarkBg else SamPurpleSecondary,
                                     modifier = Modifier.size(32.dp)
                                 )
                             }
@@ -181,7 +181,7 @@ fun VoiceEnrollmentDialog(
                     Text(
                         text = if (isRecording) "Listening... Keep speaking!" else "Tap Mic icon to record sample",
                         style = MaterialTheme.typography.bodySmall.copy(
-                            color = ArushiTextSecondary,
+                            color = SamTextSecondary,
                             textAlign = TextAlign.Center
                         )
                     )
@@ -191,8 +191,8 @@ fun VoiceEnrollmentDialog(
                     // Progress Slider Bar
                     LinearProgressIndicator(
                         progress = if (isRecording) calibrationProgress else ((currentStep - 1) / 3.0f),
-                        color = ArushiPurplePrimary,
-                        trackColor = ArushiSurfaceBorder,
+                        color = SamPurplePrimary,
+                        trackColor = SamSurfaceBorder,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(6.dp)
@@ -203,7 +203,7 @@ fun VoiceEnrollmentDialog(
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
                         contentDescription = "Success",
-                        tint = ArushiCyan,
+                        tint = SamCyan,
                         modifier = Modifier.size(72.dp)
                     )
 
@@ -212,7 +212,7 @@ fun VoiceEnrollmentDialog(
                     Text(
                         text = "Voiceprint Secured!",
                         style = MaterialTheme.typography.titleMedium.copy(
-                            color = ArushiTextPrimary,
+                            color = SamTextPrimary,
                             fontWeight = FontWeight.Bold
                         )
                     )
@@ -222,7 +222,7 @@ fun VoiceEnrollmentDialog(
                     Text(
                         text = "Sam AI voice matching signature calibrated & securely encrypted on-device. Hardware actions will now exclusively execute under your voice signature.",
                         style = MaterialTheme.typography.bodySmall.copy(
-                            color = ArushiTextMuted,
+                            color = SamTextMuted,
                             textAlign = TextAlign.Center
                         ),
                         modifier = Modifier.padding(horizontal = 12.dp)
@@ -232,11 +232,11 @@ fun VoiceEnrollmentDialog(
 
                     Button(
                         onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(containerColor = ArushiCyan),
+                        colors = ButtonDefaults.buttonColors(containerColor = SamCyan),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Finish", color = ArushiDarkBg, fontWeight = FontWeight.Bold)
+                        Text("Finish", color = SamDarkBg, fontWeight = FontWeight.Bold)
                     }
                 }
             }

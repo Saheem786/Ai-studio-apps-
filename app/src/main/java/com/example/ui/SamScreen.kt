@@ -59,23 +59,23 @@ import androidx.compose.ui.unit.sp
 import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.core.content.ContextCompat
-import com.example.ui.theme.ArushiCyan
-import com.example.ui.theme.ArushiCyanGlow
-import com.example.ui.theme.ArushiDarkBg
-import com.example.ui.theme.ArushiErrorRed
-import com.example.ui.theme.ArushiMagenta
-import com.example.ui.theme.ArushiPurplePrimary
-import com.example.ui.theme.ArushiPurpleSecondary
-import com.example.ui.theme.ArushiSurface
-import com.example.ui.theme.ArushiSurfaceBorder
-import com.example.ui.theme.ArushiSurfaceElevated
-import com.example.ui.theme.ArushiTextMuted
-import com.example.ui.theme.ArushiTextPrimary
-import com.example.ui.theme.ArushiTextSecondary
+import com.example.ui.theme.SamCyan
+import com.example.ui.theme.SamCyanGlow
+import com.example.ui.theme.SamDarkBg
+import com.example.ui.theme.SamErrorRed
+import com.example.ui.theme.SamMagenta
+import com.example.ui.theme.SamPurplePrimary
+import com.example.ui.theme.SamPurpleSecondary
+import com.example.ui.theme.SamSurface
+import com.example.ui.theme.SamSurfaceBorder
+import com.example.ui.theme.SamSurfaceElevated
+import com.example.ui.theme.SamTextMuted
+import com.example.ui.theme.SamTextPrimary
+import com.example.ui.theme.SamTextSecondary
 
 @Composable
-fun ArushiScreen(
-    viewModel: ArushiViewModel,
+fun SamScreen(
+    viewModel: SamViewModel,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -124,13 +124,20 @@ fun ArushiScreen(
         }
     }
 
-    Scaffold(
+    if (uiState.showThemeSettings) {
+        ThemeSettingsScreen(
+            currentAccent = uiState.themeAccent,
+            onAccentSelected = { viewModel.changeThemeAccent(it) },
+            onBack = { viewModel.toggleThemeSettings(false) }
+        )
+    } else {
+        Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = ArushiDarkBg,
+        containerColor = SamDarkBg,
         contentWindowInsets = WindowInsets.statusBars,
         topBar = {
             Column(modifier = Modifier.fillMaxWidth()) {
-                ArushiTopBar(
+                SamTopBar(
                     state = uiState.state,
                     onOpenDiagnostics = { viewModel.toggleDiagnosticsSheet(true) },
                     onOpenSettings = { viewModel.toggleSettingsDialog(true) }
@@ -208,9 +215,9 @@ fun ArushiScreen(
                 ) {
                     uiState.errorMessage?.let { err ->
                         Surface(
-                            color = ArushiErrorRed.copy(alpha = 0.15f),
+                            color = SamErrorRed.copy(alpha = 0.15f),
                             shape = RoundedCornerShape(12.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, ArushiErrorRed.copy(alpha = 0.4f)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, SamErrorRed.copy(alpha = 0.4f)),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 20.dp, vertical = 6.dp)
@@ -229,17 +236,17 @@ fun ArushiScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // Central Orb Visualizer
-                ArushiOrbVisualizer(
+                SamOrbVisualizer(
                     state = uiState.state,
                     amplitude = uiState.amplitude,
                     modifier = Modifier.padding(vertical = 12.dp)
                 )
 
-                // Live User & Arushi Transcript
+                // Live User & Assistant Transcript
                 Surface(
-                    color = ArushiSurfaceElevated.copy(alpha = 0.6f),
+                    color = SamSurfaceElevated.copy(alpha = 0.6f),
                     shape = RoundedCornerShape(16.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, ArushiSurfaceBorder),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, SamSurfaceBorder),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp)
@@ -247,7 +254,7 @@ fun ArushiScreen(
                     Text(
                         text = uiState.transcript,
                         style = MaterialTheme.typography.bodyMedium.copy(
-                            color = ArushiTextPrimary,
+                            color = SamTextPrimary,
                             lineHeight = 22.sp
                         ),
                         textAlign = TextAlign.Center,
@@ -264,7 +271,7 @@ fun ArushiScreen(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Persistent Conversation Logs (Room Database) displayed alongside the voice assistant interaction
+                // Persistent Conversation Logs Displayed Alongside Voice Mode
                 VoiceConversationLogsCard(
                     messages = uiState.chatMessages,
                     onOpenFullChat = { viewModel.setAppMode(AppMode.CHAT) },
@@ -280,7 +287,7 @@ fun ArushiScreen(
                     .fillMaxWidth()
                     .padding(bottom = 24.dp, top = 16.dp)
             ) {
-                // Speaker Diagnostic Bar (Section 15 Requirement)
+                // Speaker Diagnostic Bar
                 SpeakerDiagnosticBar(
                     onTestSpeaker = { viewModel.testSpeaker() }
                 )
@@ -290,11 +297,11 @@ fun ArushiScreen(
                 // Big Tactile Microphone / Power Button
                 val buttonBgColor by animateColorAsState(
                     targetValue = when (uiState.state) {
-                        AssistantState.IDLE -> ArushiPurplePrimary
-                        AssistantState.CONNECTING -> ArushiCyan
-                        AssistantState.LISTENING -> ArushiCyanGlow
-                        AssistantState.SPEAKING -> ArushiMagenta
-                        AssistantState.ERROR -> ArushiErrorRed
+                        AssistantState.IDLE -> SamPurplePrimary
+                        AssistantState.CONNECTING -> SamCyan
+                        AssistantState.LISTENING -> SamCyanGlow
+                        AssistantState.SPEAKING -> SamMagenta
+                        AssistantState.ERROR -> SamErrorRed
                     },
                     label = "btn_bg"
                 )
@@ -335,7 +342,7 @@ fun ArushiScreen(
                             AssistantState.CONNECTING -> {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(32.dp),
-                                    color = ArushiDarkBg,
+                                    color = SamDarkBg,
                                     strokeWidth = 3.dp
                                 )
                             }
@@ -343,7 +350,7 @@ fun ArushiScreen(
                                 Icon(
                                     imageVector = Icons.Default.Mic,
                                     contentDescription = "Microphone Active",
-                                    tint = ArushiDarkBg,
+                                    tint = SamDarkBg,
                                     modifier = Modifier.size(36.dp)
                                 )
                             }
@@ -372,14 +379,13 @@ fun ArushiScreen(
                 Text(
                     text = if (uiState.isMicActive) "Tap to pause or stop Sam" else "Tap to activate Sam",
                     style = MaterialTheme.typography.bodySmall.copy(
-                        color = ArushiTextMuted,
+                        color = SamTextMuted,
                         fontSize = 12.sp
                     )
                 )
             }
         }
     }
-}
 
     // Diagnostics Bottom Sheet
     if (uiState.showDiagnosticsSheet) {
@@ -402,6 +408,14 @@ fun ArushiScreen(
                 viewModel.toggleVoiceEnrollmentDialog(true)
             },
             onClearVoiceClicked = { viewModel.clearVoiceMatch() },
+            floatingWidgetEnabled = uiState.floatingWidgetEnabled,
+            onFloatingWidgetEnabledChanged = { enabled -> viewModel.toggleFloatingWidget(enabled) },
+            currentThemeAccent = uiState.themeAccent,
+            onThemeAccentChanged = { accent -> viewModel.changeThemeAccent(accent) },
+            onOpenFullThemeSettings = {
+                viewModel.toggleSettingsDialog(false)
+                viewModel.toggleThemeSettings(true)
+            },
             onSaveKey = { newKey -> viewModel.updateApiKey(newKey) },
             onDismiss = { viewModel.toggleSettingsDialog(false) }
         )
@@ -487,10 +501,31 @@ fun ArushiScreen(
                         val status = if (!uiState.deepResearchEnabled) "ENABLED" else "DISABLED"
                         Toast.makeText(context, "Deep Research $status!", Toast.LENGTH_SHORT).show()
                     }
+                    "Images" -> {
+                        viewModel.setImageGenMode(true)
+                        viewModel.setAppMode(AppMode.CHAT)
+                        Toast.makeText(context, "Image Generation Mode Active. Type your prompt to create an image.", Toast.LENGTH_LONG).show()
+                    }
+                    "Videos" -> {
+                        viewModel.toggleVideoDurationDialog(true)
+                    }
                     else -> {
                         Toast.makeText(context, "$toolName triggered!", Toast.LENGTH_SHORT).show()
                     }
                 }
+            }
+        )
+    }
+
+    // Video Duration Selection Dialog
+    if (uiState.showVideoDurationDialog) {
+        VideoDurationDialog(
+            onDismiss = { viewModel.toggleVideoDurationDialog(false) },
+            onConfirm = { option ->
+                viewModel.toggleVideoDurationDialog(false)
+                viewModel.setVideoGenMode(true, option.id)
+                viewModel.setAppMode(AppMode.CHAT)
+                viewModel.updateInputText("[Mode: AI Video Generation - Duration: ${option.title}] ")
             }
         )
     }
@@ -504,3 +539,7 @@ fun ArushiScreen(
         )
     }
 }
+}
+}
+
+

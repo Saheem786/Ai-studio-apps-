@@ -32,7 +32,7 @@ fun GeminiAdvancedToolsSheet(
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = ArushiDarkBg,
+        containerColor = SamDarkBg,
         scrimColor = Color.Black.copy(alpha = 0.6f),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     ) {
@@ -53,7 +53,7 @@ fun GeminiAdvancedToolsSheet(
                     text = "Advanced Gemini Tools",
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.Bold,
-                        color = ArushiTextPrimary,
+                        color = SamTextPrimary,
                         fontSize = 18.sp
                     )
                 )
@@ -63,26 +63,26 @@ fun GeminiAdvancedToolsSheet(
                     modifier = Modifier
                         .size(32.dp)
                         .clip(CircleShape)
-                        .background(ArushiSurfaceElevated)
+                        .background(SamSurfaceElevated)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "Close Panel",
-                        tint = ArushiTextSecondary,
+                        tint = SamTextSecondary,
                         modifier = Modifier.size(16.dp)
                     )
                 }
             }
 
             // Divider
-            Divider(color = ArushiSurfaceBorder, thickness = 1.dp)
+            Divider(color = SamSurfaceBorder, thickness = 1.dp)
             Spacer(modifier = Modifier.height(16.dp))
 
             // Section 1: Horizontal Row (Photos, Camera, Avatar, Files)
             Text(
                 text = "Quick Attachments",
                 style = MaterialTheme.typography.labelMedium.copy(
-                    color = ArushiCyanGlow,
+                    color = SamCyanGlow,
                     fontWeight = FontWeight.Bold
                 ),
                 modifier = Modifier.padding(bottom = 12.dp)
@@ -97,10 +97,10 @@ fun GeminiAdvancedToolsSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val horizontalTools = listOf(
-                    Triple("Photos", Icons.Default.PhotoLibrary, ArushiPurplePrimary),
-                    Triple("Camera", Icons.Default.PhotoCamera, ArushiCyan),
-                    Triple("Avatar", Icons.Default.Face, ArushiMagenta),
-                    Triple("Files", Icons.Default.FolderOpen, ArushiTextSecondary)
+                    Triple("Photos", Icons.Default.PhotoLibrary, SamPurplePrimary),
+                    Triple("Camera", Icons.Default.PhotoCamera, SamCyan),
+                    Triple("Avatar", Icons.Default.Face, SamMagenta),
+                    Triple("Files", Icons.Default.FolderOpen, SamTextSecondary)
                 )
 
                 horizontalTools.forEach { (name, icon, color) ->
@@ -131,7 +131,7 @@ fun GeminiAdvancedToolsSheet(
                         Text(
                             text = name,
                             style = MaterialTheme.typography.bodySmall.copy(
-                                color = ArushiTextPrimary,
+                                color = SamTextPrimary,
                                 fontWeight = FontWeight.Medium,
                                 fontSize = 11.sp
                             )
@@ -146,7 +146,7 @@ fun GeminiAdvancedToolsSheet(
             Text(
                 text = "Workspace & Services",
                 style = MaterialTheme.typography.labelMedium.copy(
-                    color = ArushiCyanGlow,
+                    color = SamCyanGlow,
                     fontWeight = FontWeight.Bold
                 ),
                 modifier = Modifier.padding(bottom = 10.dp)
@@ -171,9 +171,9 @@ fun GeminiAdvancedToolsSheet(
                 items(verticalTools.size) { idx ->
                     val (name, icon, desc) = verticalTools[idx]
                     Surface(
-                        color = ArushiSurfaceElevated,
+                        color = SamSurfaceElevated,
                         shape = RoundedCornerShape(14.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, ArushiSurfaceBorder),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, SamSurfaceBorder),
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(14.dp))
@@ -187,21 +187,21 @@ fun GeminiAdvancedToolsSheet(
                             Icon(
                                 imageVector = icon,
                                 contentDescription = name,
-                                tint = ArushiPurpleSecondary,
+                                tint = SamPurpleSecondary,
                                 modifier = Modifier.size(20.dp)
                             )
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = name,
                                     style = MaterialTheme.typography.bodyMedium.copy(
-                                        color = ArushiTextPrimary,
+                                        color = SamTextPrimary,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                 )
                                 Text(
                                     text = desc,
                                     style = MaterialTheme.typography.bodySmall.copy(
-                                        color = ArushiTextMuted,
+                                        color = SamTextMuted,
                                         fontSize = 11.sp
                                     )
                                 )
@@ -209,7 +209,7 @@ fun GeminiAdvancedToolsSheet(
                             Icon(
                                 imageVector = Icons.Default.ChevronRight,
                                 contentDescription = "Go",
-                                tint = ArushiTextMuted,
+                                tint = SamTextMuted,
                                 modifier = Modifier.size(16.dp)
                             )
                         }
@@ -219,9 +219,9 @@ fun GeminiAdvancedToolsSheet(
                 // Personal Intelligence Switch item
                 item {
                     Surface(
-                        color = ArushiSurfaceElevated,
+                        color = SamSurfaceElevated,
                         shape = RoundedCornerShape(14.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, ArushiSurfaceBorder),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, SamSurfaceBorder),
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 4.dp)
@@ -234,21 +234,21 @@ fun GeminiAdvancedToolsSheet(
                             Icon(
                                 imageVector = Icons.Default.Psychology,
                                 contentDescription = "Personal Intelligence",
-                                tint = ArushiMagenta,
+                                tint = SamMagenta,
                                 modifier = Modifier.size(20.dp)
                             )
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = "Personal Intelligence",
                                     style = MaterialTheme.typography.bodyMedium.copy(
-                                        color = ArushiTextPrimary,
+                                        color = SamTextPrimary,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                 )
                                 Text(
                                     text = "Allow Sam to adapt to your style and memory",
                                     style = MaterialTheme.typography.bodySmall.copy(
-                                        color = ArushiTextMuted,
+                                        color = SamTextMuted,
                                         fontSize = 11.sp
                                     )
                                 )
@@ -257,10 +257,10 @@ fun GeminiAdvancedToolsSheet(
                                 checked = personalIntelligenceEnabled,
                                 onCheckedChange = onPersonalIntelligenceToggled,
                                 colors = SwitchDefaults.colors(
-                                    checkedThumbColor = ArushiDarkBg,
-                                    checkedTrackColor = ArushiMagenta,
-                                    uncheckedThumbColor = ArushiTextMuted,
-                                    uncheckedTrackColor = ArushiSurface
+                                    checkedThumbColor = SamDarkBg,
+                                    checkedTrackColor = SamMagenta,
+                                    uncheckedThumbColor = SamTextMuted,
+                                    uncheckedTrackColor = SamSurface
                                 )
                             )
                         }

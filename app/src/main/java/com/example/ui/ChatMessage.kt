@@ -20,5 +20,7 @@ data class ChatMessage(
     val isAction: Boolean = false,
     val actionName: String? = null,
     val actionDetail: String? = null,
-    val imageBase64: String? = null
+    val imageBase64: String? = null,
+    val videoUrl: String? = null,
+    val videoDuration: String? = null
 )

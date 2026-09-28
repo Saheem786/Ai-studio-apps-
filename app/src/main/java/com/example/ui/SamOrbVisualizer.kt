@@ -21,19 +21,19 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
-import com.example.ui.theme.ArushiCyan
-import com.example.ui.theme.ArushiCyanGlow
-import com.example.ui.theme.ArushiErrorRed
-import com.example.ui.theme.ArushiMagenta
-import com.example.ui.theme.ArushiPinkGlow
-import com.example.ui.theme.ArushiPurplePrimary
-import com.example.ui.theme.ArushiPurpleSecondary
+import com.example.ui.theme.SamCyan
+import com.example.ui.theme.SamCyanGlow
+import com.example.ui.theme.SamErrorRed
+import com.example.ui.theme.SamMagenta
+import com.example.ui.theme.SamPinkGlow
+import com.example.ui.theme.SamPurplePrimary
+import com.example.ui.theme.SamPurpleSecondary
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
 @Composable
-fun ArushiOrbVisualizer(
+fun SamOrbVisualizer(
     state: AssistantState,
     amplitude: Float,
     modifier: Modifier = Modifier
@@ -72,18 +72,18 @@ fun ArushiOrbVisualizer(
     }
 
     val primaryColor = when (state) {
-        AssistantState.IDLE -> ArushiPurplePrimary
-        AssistantState.CONNECTING -> ArushiCyan
-        AssistantState.LISTENING -> ArushiCyanGlow
-        AssistantState.SPEAKING -> ArushiMagenta
-        AssistantState.ERROR -> ArushiErrorRed
+        AssistantState.IDLE -> SamPurplePrimary
+        AssistantState.CONNECTING -> SamCyan
+        AssistantState.LISTENING -> SamCyanGlow
+        AssistantState.SPEAKING -> SamMagenta
+        AssistantState.ERROR -> SamErrorRed
     }
 
     val secondaryColor = when (state) {
-        AssistantState.IDLE -> ArushiPurpleSecondary
-        AssistantState.CONNECTING -> ArushiPurplePrimary
-        AssistantState.LISTENING -> ArushiCyan
-        AssistantState.SPEAKING -> ArushiPurplePrimary
+        AssistantState.IDLE -> SamPurpleSecondary
+        AssistantState.CONNECTING -> SamPurplePrimary
+        AssistantState.LISTENING -> SamCyan
+        AssistantState.SPEAKING -> SamPurplePrimary
         AssistantState.ERROR -> Color(0xFFFB7185)
     }
 
@@ -124,7 +124,7 @@ fun ArushiOrbVisualizer(
                 colors = listOf(
                     primaryColor.copy(alpha = 0.85f),
                     secondaryColor.copy(alpha = 0.95f),
-                    ArushiPinkGlow.copy(alpha = 0.8f),
+                    SamPinkGlow.copy(alpha = 0.8f),
                     primaryColor.copy(alpha = 0.85f)
                 ),
                 center = center

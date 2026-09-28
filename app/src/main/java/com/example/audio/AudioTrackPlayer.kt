@@ -26,7 +26,7 @@ class AudioTrackPlayer(
     private val onDiagnosticLog: (String) -> Unit
 ) {
     companion object {
-        private const val TAG = "ArushiAudioPlayer"
+        private const val TAG = "SamAudioPlayer"
         const val DEFAULT_SAMPLE_RATE = 24000
         private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_OUT_MONO
         private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT

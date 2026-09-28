@@ -11,7 +11,7 @@ import androidx.core.content.ContextCompat
 class DeviceActionManager(private val context: Context) {
 
     companion object {
-        private const val TAG = "ArushiDeviceActions"
+        private const val TAG = "SamDeviceActions"
 
         // Safe allowlist of common applications mapped to known package names or intents
         private val ALLOWED_APPS = mapOf(
@@ -231,7 +231,7 @@ class DeviceActionManager(private val context: Context) {
                 )
             }
             else -> {
-                // Multiple matching contacts: Never guess! Let Arushi ask the user
+                // Multiple matching contacts: Never guess! Let Sam ask the user
                 DeviceActionResult.MultipleContactsFound(matchingContacts, cleanQuery)
             }
         }

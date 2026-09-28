@@ -56,7 +56,7 @@ fun CanvasView(
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding(),
-            color = ArushiDarkBg
+            color = SamDarkBg
         ) {
             Column(
                 modifier = Modifier
@@ -76,7 +76,7 @@ fun CanvasView(
                             text = "Canvas Workspace",
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.Bold,
-                                color = ArushiTextPrimary
+                                color = SamTextPrimary
                             )
                         )
                         Spacer(modifier = Modifier.height(4.dp))
@@ -85,14 +85,14 @@ fun CanvasView(
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Surface(
-                                color = ArushiPurplePrimary.copy(alpha = 0.2f),
+                                color = SamPurplePrimary.copy(alpha = 0.2f),
                                 shape = RoundedCornerShape(6.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, ArushiPurplePrimary.copy(alpha = 0.4f))
+                                border = androidx.compose.foundation.BorderStroke(1.dp, SamPurplePrimary.copy(alpha = 0.4f))
                             ) {
                                 Text(
                                     text = contentType,
                                     style = MaterialTheme.typography.labelSmall.copy(
-                                        color = ArushiPurpleSecondary,
+                                        color = SamPurpleSecondary,
                                         fontWeight = FontWeight.Bold
                                     ),
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
@@ -100,7 +100,7 @@ fun CanvasView(
                             }
                             Text(
                                 text = canvasTitle.ifEmpty { "Untitled Workspace" },
-                                style = MaterialTheme.typography.bodySmall.copy(color = ArushiTextSecondary),
+                                style = MaterialTheme.typography.bodySmall.copy(color = SamTextSecondary),
                                 maxLines = 1
                             )
                         }
@@ -116,11 +116,11 @@ fun CanvasView(
                                 Toast.makeText(context, "Full content copied to clipboard!", Toast.LENGTH_SHORT).show()
                             },
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = ArushiCyan.copy(alpha = 0.15f),
-                                contentColor = ArushiCyanGlow
+                                containerColor = SamCyan.copy(alpha = 0.15f),
+                                contentColor = SamCyanGlow
                             ),
                             shape = RoundedCornerShape(12.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, ArushiCyan.copy(alpha = 0.5f)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, SamCyan.copy(alpha = 0.5f)),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                             modifier = Modifier.height(36.dp)
                         ) {
@@ -138,19 +138,19 @@ fun CanvasView(
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(ArushiSurfaceElevated)
+                                .background(SamSurfaceElevated)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Close,
                                 contentDescription = "Close Canvas",
-                                tint = ArushiTextSecondary,
+                                tint = SamTextSecondary,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
                     }
                 }
 
-                Divider(color = ArushiSurfaceBorder, thickness = 1.dp)
+                Divider(color = SamSurfaceBorder, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // Content Body (Dark Monospaced Card with line numbers)
@@ -158,8 +158,8 @@ fun CanvasView(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
-                        .border(1.dp, ArushiSurfaceBorder, RoundedCornerShape(12.dp)),
-                    color = ArushiSurface,
+                        .border(1.dp, SamSurfaceBorder, RoundedCornerShape(12.dp)),
+                    color = SamSurface,
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     SelectionContainer {
@@ -181,7 +181,7 @@ fun CanvasView(
                                         text = String.format("%3d", index + 1),
                                         fontFamily = FontFamily.Monospace,
                                         fontSize = 11.sp,
-                                        color = ArushiTextMuted,
+                                        color = SamTextMuted,
                                         modifier = Modifier.width(36.dp)
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
@@ -190,7 +190,7 @@ fun CanvasView(
                                         text = line,
                                         fontFamily = FontFamily.Monospace,
                                         fontSize = 12.sp,
-                                        color = ArushiTextPrimary,
+                                        color = SamTextPrimary,
                                         lineHeight = 16.sp
                                     )
                                 }
@@ -212,9 +212,9 @@ fun CanvasView(
                             clipboardManager.setText(AnnotatedString(""))
                             Toast.makeText(context, "Canvas cleared!", Toast.LENGTH_SHORT).show()
                         },
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = ArushiTextMuted),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = SamTextMuted),
                         shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, ArushiSurfaceBorder),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, SamSurfaceBorder),
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(
@@ -236,9 +236,9 @@ fun CanvasView(
                             val shareIntent = android.content.Intent.createChooser(sendIntent, null)
                             context.startActivity(shareIntent)
                         },
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = ArushiTextSecondary),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = SamTextSecondary),
                         shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, ArushiSurfaceBorder),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, SamSurfaceBorder),
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(
@@ -255,18 +255,18 @@ fun CanvasView(
                             Toast.makeText(context, "Prompt content applied!", Toast.LENGTH_SHORT).show()
                             onClose()
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = ArushiPurplePrimary),
+                        colors = ButtonDefaults.buttonColors(containerColor = SamPurplePrimary),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.weight(1.2f)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Terminal,
                             contentDescription = "Apply to Prompt",
-                            tint = ArushiDarkBg,
+                            tint = SamDarkBg,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Apply Prompt", color = ArushiDarkBg, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("Apply Prompt", color = SamDarkBg, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }

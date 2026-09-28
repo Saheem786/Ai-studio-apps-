@@ -2,7 +2,7 @@ package com.example
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.example.gemini.ArushiPersonality
+import com.example.gemini.SamPersonality
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Test
@@ -22,11 +22,11 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun `verify arushi personality configuration`() {
-        assertEquals("Sam Ai", ArushiPersonality.ASSISTANT_NAME)
-        assertEquals("Aoede", ArushiPersonality.VOICE_NAME)
-        assertEquals("models/gemini-3.8-flash", ArushiPersonality.MODEL_LIVE_PRIMARY)
-        assertNotNull(ArushiPersonality.SYSTEM_INSTRUCTION)
+    fun `verify sam personality configuration`() {
+        assertEquals("Sam Ai", SamPersonality.ASSISTANT_NAME)
+        assertEquals("Aoede", SamPersonality.VOICE_NAME)
+        assertEquals("models/gemini-3.8-flash", SamPersonality.MODEL_LIVE_PRIMARY)
+        assertNotNull(SamPersonality.SYSTEM_INSTRUCTION)
     }
 
     @Test

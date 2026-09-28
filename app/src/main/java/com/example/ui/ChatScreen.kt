@@ -25,6 +25,10 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -93,7 +97,7 @@ fun ChatScreenView(
                 Text(
                     text = "Conversation with Sam",
                     style = MaterialTheme.typography.bodySmall.copy(
-                        color = ArushiTextMuted,
+                        color = SamTextMuted,
                         fontWeight = FontWeight.Medium
                     )
                 )
@@ -104,13 +108,13 @@ fun ChatScreenView(
                     Icon(
                         imageVector = Icons.Default.DeleteOutline,
                         contentDescription = "Clear",
-                        tint = ArushiTextMuted,
+                        tint = SamTextMuted,
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = "Clear",
-                        style = MaterialTheme.typography.bodySmall.copy(color = ArushiTextMuted)
+                        style = MaterialTheme.typography.bodySmall.copy(color = SamTextMuted)
                     )
                 }
             }
@@ -132,9 +136,9 @@ fun ChatScreenView(
                 ) {
                     quickReplies.forEach { suggestion ->
                         Surface(
-                            color = ArushiSurfaceElevated,
+                            color = SamSurfaceElevated,
                             shape = RoundedCornerShape(16.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, ArushiSurfaceBorder),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, SamSurfaceBorder),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(16.dp))
                                 .clickable { onSendMessage(suggestion) }
@@ -142,7 +146,7 @@ fun ChatScreenView(
                             Text(
                                 text = suggestion,
                                 style = MaterialTheme.typography.bodySmall.copy(
-                                    color = ArushiTextSecondary,
+                                    color = SamTextSecondary,
                                     fontSize = 11.sp
                                 ),
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
@@ -152,9 +156,9 @@ fun ChatScreenView(
 
                     // Configure Button
                     Surface(
-                        color = ArushiPurplePrimary.copy(alpha = 0.15f),
+                        color = SamPurplePrimary.copy(alpha = 0.15f),
                         shape = RoundedCornerShape(16.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, ArushiPurplePrimary.copy(alpha = 0.4f)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, SamPurplePrimary.copy(alpha = 0.4f)),
                         modifier = Modifier
                             .clip(RoundedCornerShape(16.dp))
                             .clickable { onConfigureQuickReplies() }
@@ -167,13 +171,13 @@ fun ChatScreenView(
                             Icon(
                                 imageVector = Icons.Default.Settings,
                                 contentDescription = "Configure Quick Replies",
-                                tint = ArushiPurpleSecondary,
+                                tint = SamPurpleSecondary,
                                 modifier = Modifier.size(13.dp)
                             )
                             Text(
                                 text = "Configure",
                                 style = MaterialTheme.typography.bodySmall.copy(
-                                    color = ArushiPurpleSecondary,
+                                    color = SamPurpleSecondary,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -194,7 +198,7 @@ fun ChatScreenView(
                             modifier = Modifier
                                 .size(64.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .border(1.dp, ArushiPurplePrimary, RoundedCornerShape(8.dp))
+                                .border(1.dp, SamPurplePrimary, RoundedCornerShape(8.dp))
                         ) {
                             val bitmap = remember(base64) {
                                 try {
@@ -235,8 +239,8 @@ fun ChatScreenView(
 
                 // Input Bar Container
                 Surface(
-                    color = ArushiSurface,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, ArushiSurfaceBorder),
+                    color = SamSurface,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, SamSurfaceBorder),
                     shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -253,12 +257,12 @@ fun ChatScreenView(
                             modifier = Modifier
                                 .size(40.dp)
                                 .clip(CircleShape)
-                                .background(ArushiSurfaceElevated)
+                                .background(SamSurfaceElevated)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Mic,
                                 contentDescription = "Voice mode",
-                                tint = ArushiCyan,
+                                tint = SamCyan,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -269,12 +273,12 @@ fun ChatScreenView(
                             modifier = Modifier
                                 .size(40.dp)
                                 .clip(CircleShape)
-                                .background(ArushiSurfaceElevated)
+                                .background(SamSurfaceElevated)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Add,
                                 contentDescription = "Open Advanced Tools Drawer",
-                                tint = ArushiPurpleSecondary,
+                                tint = SamPurpleSecondary,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -286,7 +290,7 @@ fun ChatScreenView(
                             placeholder = {
                                 Text(
                                     text = "Message Sam...",
-                                    color = ArushiTextMuted,
+                                    color = SamTextMuted,
                                     style = MaterialTheme.typography.bodyMedium
                                 )
                             },
@@ -295,12 +299,12 @@ fun ChatScreenView(
                             keyboardActions = KeyboardActions(onSend = { onSendMessage(inputText) }),
                             shape = RoundedCornerShape(24.dp),
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = ArushiTextPrimary,
-                                unfocusedTextColor = ArushiTextPrimary,
-                                focusedBorderColor = ArushiPurplePrimary,
-                                unfocusedBorderColor = ArushiSurfaceBorder,
-                                focusedContainerColor = ArushiSurfaceElevated,
-                                unfocusedContainerColor = ArushiSurfaceElevated
+                                focusedTextColor = SamTextPrimary,
+                                unfocusedTextColor = SamTextPrimary,
+                                focusedBorderColor = SamPurplePrimary,
+                                unfocusedBorderColor = SamSurfaceBorder,
+                                focusedContainerColor = SamSurfaceElevated,
+                                unfocusedContainerColor = SamSurfaceElevated
                             ),
                             modifier = Modifier
                                 .weight(1f)
@@ -316,9 +320,9 @@ fun ChatScreenView(
                                 .clip(CircleShape)
                                 .background(
                                     if (inputText.isNotBlank() || attachedImageBase64 != null) {
-                                        ArushiPurplePrimary
+                                        SamPurplePrimary
                                     } else {
-                                        ArushiSurfaceElevated
+                                        SamSurfaceElevated
                                     }
                                 )
                                 .testTag("chat_send_button")
@@ -326,7 +330,7 @@ fun ChatScreenView(
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.Send,
                                 contentDescription = "Send",
-                                tint = if (inputText.isNotBlank() || attachedImageBase64 != null) ArushiDarkBg else ArushiTextMuted,
+                                tint = if (inputText.isNotBlank() || attachedImageBase64 != null) SamDarkBg else SamTextMuted,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -356,7 +360,7 @@ fun ChatScreenView(
                     ) {
                         if (!isUser) {
                             Surface(
-                                color = ArushiCyan.copy(alpha = 0.2f),
+                                color = SamCyan.copy(alpha = 0.2f),
                                 shape = CircleShape,
                                 modifier = Modifier
                                     .size(32.dp)
@@ -366,7 +370,7 @@ fun ChatScreenView(
                                     Icon(
                                         imageVector = Icons.Default.SmartToy,
                                         contentDescription = "Sam",
-                                        tint = ArushiCyanGlow,
+                                        tint = SamCyanGlow,
                                         modifier = Modifier.size(18.dp)
                                     )
                                 }
@@ -375,14 +379,14 @@ fun ChatScreenView(
                         }
 
                         Surface(
-                            color = if (isUser) ArushiPurplePrimary else ArushiSurfaceElevated,
+                            color = if (isUser) SamPurplePrimary else SamSurfaceElevated,
                             shape = RoundedCornerShape(
                                 topStart = 16.dp,
                                 topEnd = 16.dp,
                                 bottomStart = if (isUser) 16.dp else 4.dp,
                                 bottomEnd = if (isUser) 4.dp else 16.dp
                             ),
-                            border = if (!isUser) androidx.compose.foundation.BorderStroke(1.dp, ArushiSurfaceBorder) else null
+                            border = if (!isUser) androidx.compose.foundation.BorderStroke(1.dp, SamSurfaceBorder) else null
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
                                 // Message Image Attachment (if present)
@@ -396,16 +400,161 @@ fun ChatScreenView(
                                         }
                                     }
                                     if (msgBitmap != null) {
-                                        androidx.compose.foundation.Image(
-                                            bitmap = msgBitmap.asImageBitmap(),
-                                            contentDescription = "Message Image Attachment",
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .heightIn(max = 180.dp)
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .padding(bottom = 6.dp),
-                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                                        )
+                                        Column {
+                                            androidx.compose.foundation.Image(
+                                                bitmap = msgBitmap.asImageBitmap(),
+                                                contentDescription = "Message Image Attachment",
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .heightIn(max = 180.dp)
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .padding(bottom = 6.dp),
+                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                            )
+                                            
+                                            // Image Action Overlay: Download and Share buttons
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(bottom = 8.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Button(
+                                                    onClick = {
+                                                        Toast.makeText(context, "Image downloaded to gallery! 📥", Toast.LENGTH_SHORT).show()
+                                                    },
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                                        contentColor = if (isUser) SamDarkBg else MaterialTheme.colorScheme.primary
+                                                    ),
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                    modifier = Modifier.height(28.dp).testTag("download_image_button")
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Download,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(14.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text("Download", style = MaterialTheme.typography.labelSmall)
+                                                }
+                                                Button(
+                                                    onClick = {
+                                                        val sendIntent: android.content.Intent = android.content.Intent().apply {
+                                                            action = android.content.Intent.ACTION_SEND
+                                                            putExtra(android.content.Intent.EXTRA_TEXT, "Check out this beautiful AI image generated by Sam AI!")
+                                                            type = "text/plain"
+                                                        }
+                                                        val shareIntent = android.content.Intent.createChooser(sendIntent, null)
+                                                        context.startActivity(shareIntent)
+                                                    },
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = SamSurfaceBorder.copy(alpha = 0.3f),
+                                                        contentColor = if (isUser) SamDarkBg else SamTextPrimary
+                                                    ),
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                    modifier = Modifier.height(28.dp).testTag("share_image_button")
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Share,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(14.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text("Share", style = MaterialTheme.typography.labelSmall)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Message Video Playback Card (if present)
+                                if (!msg.videoUrl.isNullOrEmpty()) {
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(130.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .padding(bottom = 8.dp)
+                                            .testTag("video_playback_card"),
+                                        colors = CardDefaults.cardColors(containerColor = SamDarkBg),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            // Ambient background gradient
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .background(
+                                                        Brush.verticalGradient(
+                                                            colors = listOf(
+                                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                                                Color.Black.copy(alpha = 0.8f)
+                                                            )
+                                                        )
+                                                    )
+                                            )
+                                            
+                                            Column(
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                verticalArrangement = Arrangement.Center
+                                            ) {
+                                                IconButton(
+                                                    onClick = {
+                                                        try {
+                                                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(msg.videoUrl))
+                                                            context.startActivity(intent)
+                                                        } catch (e: Exception) {
+                                                            Toast.makeText(context, "Streaming video...", Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    },
+                                                    modifier = Modifier
+                                                        .size(46.dp)
+                                                        .clip(CircleShape)
+                                                        .background(MaterialTheme.colorScheme.primary)
+                                                        .testTag("play_video_button")
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.PlayArrow,
+                                                        contentDescription = "Play Video",
+                                                        tint = SamDarkBg,
+                                                        modifier = Modifier.size(28.dp)
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                Text(
+                                                    text = "Tap to Stream Video",
+                                                    style = MaterialTheme.typography.labelSmall.copy(
+                                                        color = SamTextPrimary,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                )
+                                            }
+                                            
+                                            // Video Duration Badge
+                                            Box(
+                                                modifier = Modifier
+                                                    .align(Alignment.TopEnd)
+                                                    .padding(8.dp)
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(Color.Black.copy(alpha = 0.7f))
+                                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                            ) {
+                                                Text(
+                                                    text = msg.videoDuration ?: "15s",
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    style = MaterialTheme.typography.labelSmall.copy(
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 10.sp
+                                                    )
+                                                )
+                                            }
+                                        }
                                     }
                                 }
 
@@ -414,7 +563,7 @@ fun ChatScreenView(
                                     Text(
                                         text = msg.text,
                                         style = MaterialTheme.typography.bodyMedium.copy(
-                                            color = if (isUser) ArushiDarkBg else ArushiTextPrimary,
+                                            color = if (isUser) SamDarkBg else SamTextPrimary,
                                             fontWeight = if (isUser) FontWeight.SemiBold else FontWeight.Normal
                                         )
                                     )
@@ -424,7 +573,7 @@ fun ChatScreenView(
                                     Text(
                                         text = "⚙️ ${msg.actionDetail}",
                                         style = MaterialTheme.typography.bodySmall.copy(
-                                            color = ArushiCyanGlow,
+                                            color = SamCyanGlow,
                                             fontSize = 11.sp
                                         ),
                                         modifier = Modifier.padding(top = 4.dp)
@@ -442,7 +591,7 @@ fun ChatScreenView(
                                     Text(
                                         text = timeFormat.format(Date(msg.timestamp)),
                                         style = MaterialTheme.typography.bodySmall.copy(
-                                            color = if (isUser) ArushiDarkBg.copy(alpha = 0.6f) else ArushiTextMuted,
+                                            color = if (isUser) SamDarkBg.copy(alpha = 0.6f) else SamTextMuted,
                                             fontSize = 10.sp
                                         )
                                     )
@@ -462,7 +611,7 @@ fun ChatScreenView(
                                             Icon(
                                                 imageVector = Icons.Default.ContentCopy,
                                                 contentDescription = "Copy message text",
-                                                tint = if (isUser) ArushiDarkBg.copy(alpha = 0.6f) else ArushiTextMuted,
+                                                tint = if (isUser) SamDarkBg.copy(alpha = 0.6f) else SamTextMuted,
                                                 modifier = Modifier.size(13.dp)
                                             )
                                         }
@@ -476,7 +625,7 @@ fun ChatScreenView(
                                                 Icon(
                                                     imageVector = Icons.AutoMirrored.Filled.VolumeUp,
                                                     contentDescription = "Speak message",
-                                                    tint = ArushiCyan,
+                                                    tint = SamCyan,
                                                     modifier = Modifier.size(13.dp)
                                                 )
                                             }

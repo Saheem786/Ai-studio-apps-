@@ -9,54 +9,51 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-private val DarkColorScheme = darkColorScheme(
-    primary = ArushiPurplePrimary,
-    onPrimary = ArushiDarkBg,
-    primaryContainer = ArushiSurfaceElevated,
-    onPrimaryContainer = ArushiPurpleSecondary,
-    secondary = ArushiCyan,
-    onSecondary = ArushiDarkBg,
-    secondaryContainer = ArushiSurfaceElevated,
-    onSecondaryContainer = ArushiCyanGlow,
-    tertiary = ArushiMagenta,
-    onTertiary = ArushiDarkBg,
-    background = ArushiDarkBg,
-    onBackground = ArushiTextPrimary,
-    surface = ArushiSurface,
-    onSurface = ArushiTextPrimary,
-    surfaceVariant = ArushiSurfaceElevated,
-    onSurfaceVariant = ArushiTextSecondary,
-    outline = ArushiSurfaceBorder,
-    error = ArushiErrorRed,
-    onError = ArushiTextPrimary
-)
-
 @Composable
 fun MyApplicationTheme(
-    darkTheme: Boolean = true, // Default to futuristic dark mode for voice assistant
-    dynamicColor: Boolean = false, // Keep signature Arushi aesthetic
+    darkTheme: Boolean = true,
+    dynamicColor: Boolean = false,
+    accentPrimary: Color = SamPurplePrimary,
+    accentSecondary: Color = SamPurpleSecondary,
+    accentTertiary: Color = SamMagenta,
+    accentGlow: Color = SamCyanGlow,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-        else -> DarkColorScheme
-    }
+    val colorScheme = darkColorScheme(
+        primary = accentPrimary,
+        onPrimary = SamDarkBg,
+        primaryContainer = SamSurfaceElevated,
+        onPrimaryContainer = accentSecondary,
+        secondary = accentGlow,
+        onSecondary = SamDarkBg,
+        secondaryContainer = SamSurfaceElevated,
+        onSecondaryContainer = accentGlow,
+        tertiary = accentTertiary,
+        onTertiary = SamDarkBg,
+        background = SamDarkBg,
+        onBackground = SamTextPrimary,
+        surface = SamSurface,
+        onSurface = SamTextPrimary,
+        surfaceVariant = SamSurfaceElevated,
+        onSurfaceVariant = SamTextSecondary,
+        outline = SamSurfaceBorder,
+        error = SamErrorRed,
+        onError = SamTextPrimary
+    )
 
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as? Activity)?.window
             if (window != null) {
-                window.statusBarColor = ArushiDarkBg.toArgb()
-                window.navigationBarColor = ArushiDarkBg.toArgb()
+                window.statusBarColor = SamDarkBg.toArgb()
+                window.navigationBarColor = SamDarkBg.toArgb()
                 WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
                 WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = false
             }

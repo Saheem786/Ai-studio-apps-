@@ -20,7 +20,7 @@ class MicrophoneRecorder(
     private val onError: (String) -> Unit
 ) {
     companion object {
-        private const val TAG = "ArushiMicRecorder"
+        private const val TAG = "SamMicRecorder"
         const val SAMPLE_RATE = 16000
         private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
         private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT

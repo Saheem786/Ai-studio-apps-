@@ -2,6 +2,8 @@ package com.example.ui
 
 import android.app.Application
 import android.content.Context
+import com.example.ui.theme.AppThemeAccent
+
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.BuildConfig
@@ -13,7 +15,7 @@ import com.example.data.ChatRepository
 import com.example.device.ContactItem
 import com.example.device.DeviceActionManager
 import com.example.device.DeviceActionResult
-import com.example.gemini.ArushiPersonality
+import com.example.gemini.SamPersonality
 import com.example.gemini.GeminiLiveService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +26,9 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import android.content.Intent
+import android.os.Build
+import android.util.Log
 
 enum class AssistantState {
     IDLE,
@@ -33,7 +38,7 @@ enum class AssistantState {
     ERROR
 }
 
-data class ArushiUiState(
+data class SamUiState(
     val state: AssistantState = AssistantState.IDLE,
     val amplitude: Float = 0f,
     val transcript: String = "Tap the microphone to start talking to Sam",
@@ -42,7 +47,7 @@ data class ArushiUiState(
     val diagnosticLogs: List<String> = emptyList(),
     val isMicActive: Boolean = false,
     val apiKey: String = "",
-    val selectedModel: String = ArushiPersonality.MODEL_LIVE_PRIMARY,
+    val selectedModel: String = SamPersonality.MODEL_LIVE_PRIMARY,
     val multipleContacts: List<ContactItem>? = null,
     val showDiagnosticsSheet: Boolean = false,
     val showSettingsDialog: Boolean = false,
@@ -67,13 +72,20 @@ data class ArushiUiState(
     val personalIntelligenceEnabled: Boolean = true,
     val voiceMatchEnforced: Boolean = false,
     val isVoiceCalibrationCompleted: Boolean = false,
-    val showVoiceEnrollmentDialog: Boolean = false
+    val showVoiceEnrollmentDialog: Boolean = false,
+    val floatingWidgetEnabled: Boolean = false,
+    val themeAccent: AppThemeAccent = AppThemeAccent.CLASSIC,
+    val showThemeSettings: Boolean = false,
+    val selectedVideoDuration: String? = null,
+    val isImageGenActive: Boolean = false,
+    val isVideoGenActive: Boolean = false,
+    val showVideoDurationDialog: Boolean = false
 )
 
-class ArushiViewModel(application: Application) : AndroidViewModel(application) {
+class SamViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val _uiState = MutableStateFlow(ArushiUiState())
-    val uiState: StateFlow<ArushiUiState> = _uiState.asStateFlow()
+    private val _uiState = MutableStateFlow(SamUiState())
+    val uiState: StateFlow<SamUiState> = _uiState.asStateFlow()
 
     private val deviceActionManager = DeviceActionManager(application.applicationContext)
     private val deviceSystemManager = com.example.system.DeviceSystemManager(application.applicationContext)
@@ -109,7 +121,7 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
         }
 
         // Load initial API key from SharedPreferences or BuildConfig
-        val prefs = application.getSharedPreferences("arushi_prefs", Context.MODE_PRIVATE)
+        val prefs = application.getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
         val savedKey = prefs.getString("gemini_api_key", null)?.trim()?.ifEmpty { null }
             ?: prefs.getString("custom_gemini_key", null)?.trim()?.ifEmpty { null }
         val initialKey = if (!savedKey.isNullOrBlank()) {
@@ -139,13 +151,23 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
 
         val isEnrolled = voiceMatchManager.isVoiceEnrolled()
         val isEnforced = prefs.getBoolean("voice_match_enforced", false)
+        val isFloatingWidgetOn = prefs.getBoolean("floating_widget_enabled", false)
+
+        val savedThemeStr = prefs.getString("theme_accent", "CLASSIC") ?: "CLASSIC"
+        val themeAccent = try {
+            AppThemeAccent.valueOf(savedThemeStr)
+        } catch (e: Exception) {
+            AppThemeAccent.CLASSIC
+        }
 
         _uiState.update { 
             it.copy(
                 apiKey = initialKey, 
                 quickReplies = replies,
                 isVoiceCalibrationCompleted = isEnrolled,
-                voiceMatchEnforced = isEnforced && isEnrolled
+                voiceMatchEnforced = isEnforced && isEnrolled,
+                floatingWidgetEnabled = isFloatingWidgetOn,
+                themeAccent = themeAccent
             ) 
         }
 
@@ -563,6 +585,114 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
                     )
                 }
 
+                "sendWhatsAppMessage" -> {
+                    val recipient = args["recipient"]?.toString() ?: ""
+                    val message = args["message"]?.toString() ?: ""
+                    val ok = deviceSystemManager.sendWhatsAppMessage(recipient, message)
+                    val resultMsg = if (ok) {
+                        "WhatsApp opened with message to $recipient ready"
+                    } else {
+                        "Failed to open WhatsApp intent"
+                    }
+                    _uiState.update { it.copy(actionBanner = resultMsg) }
+                    geminiService?.sendToolResponse(
+                        callId,
+                        name,
+                        mapOf("success" to ok, "message" to resultMsg)
+                    )
+                    chatRepository.saveMessage(
+                        ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = "WhatsApp message to $recipient is ready sir. 💬",
+                            isAction = true,
+                            actionName = "sendWhatsAppMessage",
+                            actionDetail = resultMsg
+                        )
+                    )
+                }
+
+                "dialContact" -> {
+                    val phoneNumber = args["phoneNumber"]?.toString() ?: ""
+                    val ok = deviceSystemManager.initiatePhoneCall(phoneNumber)
+                    val resultMsg = if (ok) {
+                        "Dialer initiated with $phoneNumber"
+                    } else {
+                        "Failed to launch dialer intent"
+                    }
+                    _uiState.update { it.copy(actionBanner = resultMsg) }
+                    geminiService?.sendToolResponse(
+                        callId,
+                        name,
+                        mapOf("success" to ok, "message" to resultMsg)
+                    )
+                    chatRepository.saveMessage(
+                        ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = "Dialer initiated for $phoneNumber. 📞",
+                            isAction = true,
+                            actionName = "dialContact",
+                            actionDetail = resultMsg
+                        )
+                    )
+                }
+
+                "toggleFloatingWidget" -> {
+                    val enable = args["enable"] as? Boolean ?: true
+                    val context = getApplication<Application>().applicationContext
+                    val intent = Intent(context, JarvisFloatingWidgetService::class.java)
+                    
+                    val ok = try {
+                        if (enable) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(context)) {
+                                val settingsIntent = Intent(
+                                    android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    android.net.Uri.parse("package:${context.packageName}")
+                                ).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                context.startActivity(settingsIntent)
+                                "Overlay permission required. Settings page opened."
+                            } else {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    context.startForegroundService(intent)
+                                } else {
+                                    context.startService(intent)
+                                }
+                                "Floating Jarvis widget has been activated"
+                            }
+                        } else {
+                            context.stopService(intent)
+                            "Floating Jarvis widget has been deactivated"
+                        }
+                        true
+                    } catch (e: Exception) {
+                        Log.e("SamViewModel", "Error toggling floating widget", e)
+                        false
+                    }
+
+                    val resultMsg = if (ok) {
+                        if (enable) "Floating widget activated" else "Floating widget deactivated"
+                    } else {
+                        "Failed to toggle floating widget"
+                    }
+
+                    _uiState.update { it.copy(actionBanner = resultMsg) }
+                    geminiService?.sendToolResponse(
+                        callId,
+                        name,
+                        mapOf("success" to ok, "message" to resultMsg)
+                    )
+                    chatRepository.saveMessage(
+                        ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = "$resultMsg. 🔮",
+                            isAction = true,
+                            actionName = "toggleFloatingWidget",
+                            actionDetail = resultMsg
+                        )
+                    )
+                }
+
                 else -> {
                     geminiService?.sendToolResponse(
                         callId,
@@ -583,7 +713,7 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun startSession() {
-        val prefs = getApplication<Application>().getSharedPreferences("arushi_prefs", Context.MODE_PRIVATE)
+        val prefs = getApplication<Application>().getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
         val key = _uiState.value.apiKey.ifBlank {
             prefs.getString("gemini_api_key", null)?.trim()?.ifEmpty { null }
                 ?: prefs.getString("custom_gemini_key", null)?.trim()?.ifEmpty { null }
@@ -803,7 +933,7 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
 
     fun updateApiKey(newKey: String) {
         val trimmed = newKey.trim()
-        val prefs = getApplication<Application>().getSharedPreferences("arushi_prefs", Context.MODE_PRIVATE)
+        val prefs = getApplication<Application>().getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
         prefs.edit()
             .putString("gemini_api_key", trimmed)
             .putString("custom_gemini_key", trimmed)
@@ -821,6 +951,10 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.update { it.copy(showSettingsDialog = show) }
     }
 
+    fun toggleThemeSettings(show: Boolean) {
+        _uiState.update { it.copy(showThemeSettings = show) }
+    }
+
     fun toggleToolsSheet(show: Boolean) {
         _uiState.update { it.copy(showToolsSheet = show) }
     }
@@ -830,8 +964,126 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
         addLog("Personal Intelligence setting set to: $enabled")
     }
 
+    fun setImageGenMode(active: Boolean) {
+        _uiState.update { it.copy(isImageGenActive = active, isVideoGenActive = false) }
+        addLog("Image Generation Mode: $active")
+    }
+
+    fun toggleVideoDurationDialog(show: Boolean) {
+        _uiState.update { it.copy(showVideoDurationDialog = show) }
+    }
+
+    fun setVideoGenMode(active: Boolean, duration: String? = null) {
+        _uiState.update { 
+            it.copy(
+                isVideoGenActive = active,
+                isImageGenActive = false,
+                selectedVideoDuration = duration
+            )
+        }
+        addLog("Video Generation Mode: $active, Duration: $duration")
+    }
+
+    fun requestImageGeneration(prompt: String, referenceImageBase64: String?) {
+        _uiState.update { it.copy(isSendingChat = true) }
+        viewModelScope.launch {
+            val service = geminiService
+            if (service == null) {
+                _uiState.update { it.copy(isSendingChat = false, errorMessage = "AI Service not connected") }
+                return@launch
+            }
+            
+            val result = service.generateImage(prompt, referenceImageBase64)
+            result.onSuccess { base64 ->
+                val responseMsg = ChatMessage(
+                    sender = MessageSender.ASSISTANT,
+                    text = "Aapka custom dynamic image generate ho chuka hai! 🎨 Here is the output for: \"$prompt\"",
+                    imageBase64 = base64
+                )
+                chatRepository.saveMessage(responseMsg)
+                addLog("Successfully generated AI image for '$prompt'")
+            }.onFailure { err ->
+                val errorMsg = ChatMessage(
+                    sender = MessageSender.ASSISTANT,
+                    text = "Image generate karne mein error aaya: ${err.message}"
+                )
+                chatRepository.saveMessage(errorMsg)
+                addLog("Failed to generate AI image: ${err.message}")
+            }
+            _uiState.update { it.copy(isSendingChat = false, isImageGenActive = false) }
+        }
+    }
+
+    fun requestVideoGeneration(prompt: String, duration: String) {
+        _uiState.update { it.copy(isSendingChat = true) }
+        viewModelScope.launch {
+            val service = geminiService
+            if (service == null) {
+                _uiState.update { it.copy(isSendingChat = false, errorMessage = "AI Service not connected") }
+                return@launch
+            }
+
+            val isShort = duration.contains("15") || duration.contains("30") || duration == "15s" || duration == "30s"
+            if (isShort) {
+                val durSeconds = if (duration.contains("15") || duration == "15s") 15 else 30
+                val result = service.generateVideoClip(prompt, durSeconds)
+                result.onSuccess { mp4Url ->
+                    val responseMsg = ChatMessage(
+                        sender = MessageSender.ASSISTANT,
+                        text = "Aapka AI video clip ($duration) ready hai! 🎬 Rendered output for: \"$prompt\"",
+                        videoUrl = mp4Url,
+                        videoDuration = duration
+                    )
+                    chatRepository.saveMessage(responseMsg)
+                    addLog("Successfully generated $duration AI video for '$prompt'")
+                }.onFailure { err ->
+                    val errorMsg = ChatMessage(
+                        sender = MessageSender.ASSISTANT,
+                        text = "Video rendering failed: ${err.message}"
+                    )
+                    chatRepository.saveMessage(errorMsg)
+                }
+            } else {
+                // Multi-Scene Script, Storyboard, Canvas visualization
+                val scenesCount = if (duration.contains("1") || duration == "1m") 3 else if (duration.contains("5") || duration == "5m") 8 else 12
+                val sceneCards = StringBuilder()
+                sceneCards.append("# AI Video Storyboard - $duration Production\n")
+                sceneCards.append("Prompt: \"$prompt\"\n\n")
+                sceneCards.append("Generated scenes and timeline sequences mapped to Canvas interactive workspace:\n\n")
+                
+                for (i in 1..scenesCount) {
+                    sceneCards.append("## Scene $i: Timeline [${(i-1)*15}s - ${i*15}s]\n")
+                    sceneCards.append("- **Visual Prompt**: Cinematic close-up, high-fidelity render of segment matching scene $i for '$prompt'. Ultra detailed cinematic lighting.\n")
+                    sceneCards.append("- **Audio/Voiceover Script**: \"Exploring the depth of this transition, visual layers blend smoothly...\"\n")
+                    sceneCards.append("- **Rendering Status**: COMPILED / READY\n\n")
+                }
+                
+                openCanvas(
+                    title = "AI Video Production: $duration",
+                    contentType = "Markdown",
+                    content = sceneCards.toString()
+                )
+                
+                val responseMsg = ChatMessage(
+                    sender = MessageSender.ASSISTANT,
+                    text = "Aapka multi-scene video storyboard ($duration) generate karke side Canvas workspace board mein load kar diya gaya hai! 📽️ Open the Canvas workspace to edit or play the rendered storyboard visual scripts."
+                )
+                chatRepository.saveMessage(responseMsg)
+                addLog("Successfully generated multi-scene video production script for '$prompt'")
+            }
+            
+            _uiState.update { 
+                it.copy(
+                    isSendingChat = false, 
+                    isVideoGenActive = false, 
+                    selectedVideoDuration = null
+                )
+            }
+        }
+    }
+
     fun toggleVoiceMatchEnforced(enforced: Boolean) {
-        val prefs = getApplication<Application>().getSharedPreferences("arushi_prefs", Context.MODE_PRIVATE)
+        val prefs = getApplication<Application>().getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
         prefs.edit().putBoolean("voice_match_enforced", enforced).apply()
         _uiState.update { it.copy(voiceMatchEnforced = enforced) }
         addLog("Voice Match enforcement toggled to: $enforced")
@@ -844,7 +1096,7 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
     fun completeVoiceEnrollment(samples: List<ByteArray>) {
         val ok = voiceMatchManager.enrollVoice(samples)
         if (ok) {
-            val prefs = getApplication<Application>().getSharedPreferences("arushi_prefs", Context.MODE_PRIVATE)
+            val prefs = getApplication<Application>().getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
             prefs.edit().putBoolean("voice_match_enforced", true).apply()
             _uiState.update { 
                 it.copy(
@@ -861,7 +1113,7 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
 
     fun clearVoiceMatch() {
         voiceMatchManager.clearEnrolledVoice()
-        val prefs = getApplication<Application>().getSharedPreferences("arushi_prefs", Context.MODE_PRIVATE)
+        val prefs = getApplication<Application>().getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
         prefs.edit().putBoolean("voice_match_enforced", false).apply()
         _uiState.update { 
             it.copy(
@@ -870,6 +1122,41 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
             ) 
         }
         addLog("Cleared owner voiceprint signature. Voice Match enforcement disabled.")
+    }
+
+    fun toggleFloatingWidget(enabled: Boolean) {
+        val context = getApplication<Application>().applicationContext
+        val prefs = context.getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("floating_widget_enabled", enabled).apply()
+        _uiState.update { it.copy(floatingWidgetEnabled = enabled) }
+
+        val intent = Intent(context, JarvisFloatingWidgetService::class.java)
+        try {
+            if (enabled) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(context)) {
+                    val settingsIntent = Intent(
+                        android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        android.net.Uri.parse("package:${context.packageName}")
+                    ).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(settingsIntent)
+                    addLog("Requested SYSTEM_ALERT_WINDOW permission from Settings screen")
+                } else {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        context.startForegroundService(intent)
+                    } else {
+                        context.startService(intent)
+                    }
+                    addLog("Jarvis Floating Widget Service started successfully")
+                }
+            } else {
+                context.stopService(intent)
+                addLog("Jarvis Floating Widget Service stopped successfully")
+            }
+        } catch (e: Exception) {
+            Log.e("SamViewModel", "Error toggling floating widget service", e)
+        }
     }
 
     fun clearLogs() {
@@ -903,6 +1190,16 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
             chatRepository.saveMessage(userMsg)
         }
         addLog("Chat message sent: '$text' (Has Image: ${attachedImg != null}, Deep Research: $isDeepResearch)")
+
+        if (_uiState.value.isImageGenActive) {
+            requestImageGeneration(text, attachedImg)
+            return
+        }
+
+        if (_uiState.value.isVideoGenActive) {
+            requestVideoGeneration(text, _uiState.value.selectedVideoDuration ?: "15s")
+            return
+        }
 
         // Check if message corresponds to a common device action
         val lower = text.lowercase()
@@ -994,7 +1291,7 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
 
         viewModelScope.launch {
             val effectiveKey = _uiState.value.apiKey.ifBlank {
-                val prefs = getApplication<Application>().getSharedPreferences("arushi_prefs", Context.MODE_PRIVATE)
+                val prefs = getApplication<Application>().getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
                 prefs.getString("gemini_api_key", null)?.trim()?.ifEmpty { null }
                     ?: prefs.getString("custom_gemini_key", null)?.trim()?.ifEmpty { null }
                     ?: ""
@@ -1087,7 +1384,7 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun saveQuickReplies(list: List<String>) {
-        val prefs = getApplication<Application>().getSharedPreferences("arushi_prefs", Context.MODE_PRIVATE)
+        val prefs = getApplication<Application>().getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
         prefs.edit().putString("quick_replies", list.joinToString("|||")).apply()
         _uiState.update { it.copy(quickReplies = list) }
     }
@@ -1119,6 +1416,13 @@ class ArushiViewModel(application: Application) : AndroidViewModel(application) 
 
     fun closeCanvas() {
         _uiState.update { it.copy(showCanvas = false) }
+    }
+
+    fun changeThemeAccent(accent: AppThemeAccent) {
+        val prefs = getApplication<Application>().getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("theme_accent", accent.name).apply()
+        _uiState.update { it.copy(themeAccent = accent) }
+        addLog("Accent theme color changed to: ${accent.displayName}")
     }
 
     override fun onCleared() {

@@ -108,4 +108,36 @@ class DeviceSystemManager(private val context: Context) {
             false
         }
     }
+
+    fun sendWhatsAppMessage(phoneNumberOrName: String, messageText: String): Boolean {
+        return try {
+            val digits = phoneNumberOrName.filter { it.isDigit() }
+            val uriString = if (digits.length >= 7) {
+                "https://api.whatsapp.com/send?phone=$digits&text=${java.net.URLEncoder.encode(messageText, "UTF-8")}"
+            } else {
+                "https://api.whatsapp.com/send?text=${java.net.URLEncoder.encode(messageText, "UTF-8")}"
+            }
+            val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(uriString)).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            true
+        } catch (e: Exception) {
+            Log.e("DeviceSystemManager", "WhatsApp intent error", e)
+            false
+        }
+    }
+
+    fun initiatePhoneCall(phoneNumber: String): Boolean {
+        return try {
+            val intent = Intent(Intent.ACTION_DIAL, android.net.Uri.parse("tel:${phoneNumber.filter { it.isDigit() || it == '+' }}")).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            true
+        } catch (e: Exception) {
+            Log.e("DeviceSystemManager", "Phone call intent error", e)
+            false
+        }
+    }
 }
