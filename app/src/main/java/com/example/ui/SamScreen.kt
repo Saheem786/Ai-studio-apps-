@@ -268,12 +268,21 @@ fun SamScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Central Orb Visualizer
+                // Central Orb Visualizer with dynamic acoustic ripples
                 SamOrbVisualizer(
                     state = uiState.state,
                     amplitude = uiState.amplitude,
-                    modifier = Modifier.padding(vertical = 12.dp)
+                    modifier = Modifier.padding(vertical = 8.dp)
                 )
+
+                // Real-time Audio Waveform & Frequency Spectrum reacting live to microphone input
+                RealtimeAudioWaveformVisualizer(
+                    state = uiState.state,
+                    amplitude = uiState.amplitude,
+                    modifier = Modifier.padding(vertical = 6.dp)
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
 
                 // Live User & Assistant Transcript
                 Surface(
@@ -345,19 +354,31 @@ fun SamScreen(
                     label = "btn_scale"
                 )
 
+                val micRippleScale by animateFloatAsState(
+                    targetValue = if (uiState.isMicActive) (1.0f + uiState.amplitude * 0.45f) else 1.0f,
+                    label = "mic_ripple_scale"
+                )
+
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(88.dp)
+                        .size(104.dp)
                         .scale(buttonScale)
                 ) {
-                    // Outer glow ring when active
+                    // Dynamic acoustic ripple shockwave around mic button
                     if (uiState.isMicActive) {
+                        Box(
+                            modifier = Modifier
+                                .size(104.dp)
+                                .scale(micRippleScale)
+                                .clip(CircleShape)
+                                .background(buttonBgColor.copy(alpha = (0.15f + uiState.amplitude * 0.25f).coerceIn(0f, 0.4f)))
+                        )
                         Box(
                             modifier = Modifier
                                 .size(88.dp)
                                 .clip(CircleShape)
-                                .background(buttonBgColor.copy(alpha = 0.25f))
+                                .background(buttonBgColor.copy(alpha = 0.28f))
                         )
                     }
 
