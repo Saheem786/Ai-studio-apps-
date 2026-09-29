@@ -1,5 +1,6 @@
 package com.example.device
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -44,6 +45,22 @@ class SamTools(private val context: Context) {
                         })
                     })
                     put("required", JSONArray().put("appName"))
+                })
+            })
+
+            // 2. play_youtube
+            funcs.put(JSONObject().apply {
+                put("name", "play_youtube")
+                put("description", "Searches and plays a song, music video, track, or artist directly on YouTube (e.g. 'Arijit Singh song chalao', 'play Believer on YouTube').")
+                put("parameters", JSONObject().apply {
+                    put("type", "OBJECT")
+                    put("properties", JSONObject().apply {
+                        put("searchQuery", JSONObject().apply {
+                            put("type", "STRING")
+                            put("description", "Song name, artist, music track, or video title to search and play on YouTube.")
+                        })
+                    })
+                    put("required", JSONArray().put("searchQuery"))
                 })
             })
 
@@ -190,6 +207,11 @@ class SamTools(private val context: Context) {
                 openApp(appName)
             }
 
+            "play_youtube", "playSongOnYouTube", "playSong", "playMusic", "play_song", "search_youtube", "youtubeSearch" -> {
+                val query = (args["searchQuery"] ?: args["query"] ?: args["song"] ?: args["songName"] ?: args["title"] ?: args["name"] ?: "").toString().trim()
+                playSongOnYouTube(context, query)
+            }
+
             "send_whatsapp", "sendWhatsAppMessage", "openWhatsApp", "sendWhatsApp" -> {
                 val contact = (args["contactName"] ?: args["recipient"] ?: args["phone"] ?: "").toString().trim()
                 val message = (args["message"] ?: args["text"] ?: "Hello from Sam AI!").toString().trim()
@@ -242,28 +264,11 @@ class SamTools(private val context: Context) {
             .replace(Regex("(?i)\\s*(kholo|chalao|open karo|launch karo)$"), "")
             .trim()
 
-        // YouTube Search Interception
-        if (clean.contains("youtube") && clean.length > 7) {
+        // YouTube Interception (with search/song query extraction if present)
+        if (clean.contains("youtube")) {
             val query = clean.replace("youtube", "").replace("par", "").replace("pe", "")
                 .replace("play", "").replace("search", "").replace("karo", "").trim()
-            if (query.isNotBlank()) {
-                return try {
-                    val appIntent = Intent(Intent.ACTION_SEARCH).apply {
-                        setPackage("com.google.android.youtube")
-                        putExtra("query", query)
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    context.startActivity(appIntent)
-                    SamToolResult.Success("YouTube par '$query' play kar diya hai! 🎬")
-                } catch (e: Exception) {
-                    val encoded = URLEncoder.encode(query, "UTF-8")
-                    val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/results?search_query=$encoded")).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    context.startActivity(webIntent)
-                    SamToolResult.Success("YouTube web par '$query' search kar diya hai! 🎬")
-                }
-            }
+            return playSongOnYouTube(context, query)
         }
 
         // Direct package / intent mapping
@@ -351,6 +356,47 @@ class SamTools(private val context: Context) {
             SamToolResult.Success("'$appName' ke liye web search open kar diya hai! 🌐")
         } catch (e: Exception) {
             SamToolResult.Failure("Failed to open '$appName': ${e.message}", e.message ?: "")
+        }
+    }
+
+    fun playSongOnYouTube(context: Context, searchQuery: String): SamToolResult {
+        val cleanQuery = searchQuery
+            .replace(Regex("(?i)(play|chalao|suno|baja|sunao|gana|song|on youtube|youtube par|youtube pe|kholo|search)"), "")
+            .trim()
+
+        val effectiveQuery = if (cleanQuery.isNotBlank()) cleanQuery else searchQuery.trim().ifEmpty { "trending songs" }
+        val encodedQuery = URLEncoder.encode(effectiveQuery, "UTF-8")
+        val url = "https://www.youtube.com/results?search_query=$encodedQuery"
+
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            data = Uri.parse(url)
+            setPackage("com.google.android.youtube")
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+
+        return try {
+            context.startActivity(intent)
+            SamToolResult.Success("YouTube par '$effectiveQuery' play kar diya hai! 🎬")
+        } catch (e: ActivityNotFoundException) {
+            try {
+                val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(webIntent)
+                SamToolResult.Success("YouTube web par '$effectiveQuery' open kar diya hai! 🎬")
+            } catch (ex: Exception) {
+                SamToolResult.Failure("YouTube open karne mein error aaya", ex.message ?: "")
+            }
+        } catch (e: Exception) {
+            try {
+                val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(webIntent)
+                SamToolResult.Success("YouTube web par '$effectiveQuery' open kar diya hai! 🎬")
+            } catch (ex: Exception) {
+                SamToolResult.Failure("YouTube open karne mein error aaya", ex.message ?: "")
+            }
         }
     }
 

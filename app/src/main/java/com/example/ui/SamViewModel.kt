@@ -408,6 +408,31 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             when (name) {
+                "play_youtube", "playSongOnYouTube", "playSong", "playMusic", "play_song", "search_youtube", "youtubeSearch" -> {
+                    val query = (args["searchQuery"] ?: args["query"] ?: args["song"] ?: args["songName"] ?: args["title"] ?: args["name"] ?: "").toString().trim()
+                    val result = samTools.playSongOnYouTube(getApplication<Application>().applicationContext, query)
+                    val success = result is com.example.device.SamToolResult.Success
+                    val msg = result.message
+                    _uiState.update { it.copy(actionBanner = msg) }
+                    geminiService?.sendToolResponse(
+                        callId,
+                        name,
+                        mapOf("success" to success, "query" to query, "message" to msg)
+                    )
+                    chatRepository.saveMessage(
+                        ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = msg,
+                            isAction = true,
+                            actionName = "play_youtube",
+                            actionDetail = msg
+                        )
+                    )
+                    if (_uiState.value.currentMode == AppMode.VOICE) {
+                        ttsEngine?.speak("YouTube par play kar diya hai")
+                    }
+                }
+
                 "open_app", "openApp", "launchApp" -> {
                     val appName = (args["appName"] ?: args["name"] ?: args["app"] ?: "").toString().trim()
                     val result = samTools.openApp(appName)
@@ -1596,6 +1621,32 @@ $tempo beats per minute, fading out...
 
         // Check if message corresponds to a common device action
         val lower = text.lowercase()
+
+        // Check for YouTube song play or search intent
+        if ((lower.contains("youtube") && (lower.contains("play") || lower.contains("chalao") || lower.contains("search") || lower.contains("suno") || lower.contains("gana") || lower.contains("song") || lower.contains("baja"))) ||
+            ((lower.contains("gana") || lower.contains("song") || lower.contains("music")) && (lower.contains("chalao") || lower.contains("play") || lower.contains("baja") || lower.contains("suno")))) {
+            val cleanQuery = text
+                .replace(Regex("(?i)(play|chalao|suno|baja|sunao|gana|song|music|on youtube|youtube par|youtube pe|kholo|search|par|pe)"), "")
+                .trim()
+            val queryToUse = if (cleanQuery.isNotBlank()) cleanQuery else text
+            val result = samTools.playSongOnYouTube(getApplication<Application>().applicationContext, queryToUse)
+            val actionMsg = ChatMessage(
+                sender = MessageSender.ASSISTANT,
+                text = result.message,
+                isAction = true,
+                actionName = "play_youtube",
+                actionDetail = result.message
+            )
+            viewModelScope.launch {
+                chatRepository.saveMessage(actionMsg)
+            }
+            if (_uiState.value.currentMode == AppMode.VOICE) {
+                ttsEngine?.speak("YouTube par play kar diya hai")
+            }
+            _uiState.update { it.copy(isSendingChat = false) }
+            return
+        }
+
         if (lower.contains("whatsapp")) {
             val result = deviceActionManager.openWhatsApp()
             val msg = if (result is DeviceActionResult.Success) result.message else (result as? DeviceActionResult.Failure)?.error ?: "Attempted to open WhatsApp"
