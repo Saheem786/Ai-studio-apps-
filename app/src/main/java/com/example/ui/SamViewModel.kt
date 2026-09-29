@@ -2,6 +2,9 @@ package com.example.ui
 
 import android.app.Application
 import android.content.Context
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import com.example.ui.theme.AppThemeAccent
 
 import androidx.lifecycle.AndroidViewModel
@@ -968,7 +971,24 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startSession() {
-        val prefs = getApplication<Application>().getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
+        val context = getApplication<Application>().applicationContext
+        val hasMicPermission = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (!hasMicPermission) {
+            _uiState.update {
+                it.copy(
+                    errorMessage = "Microphone permission chahiye voice mode ke liye.",
+                    actionBanner = "Microphone permission required"
+                )
+            }
+            addLog("Microphone permission not granted. Cannot start voice mode.")
+            return
+        }
+
+        val prefs = context.getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
         val savedKey = prefs.getString("gemini_api_key", "")?.trim()?.ifEmpty {
             prefs.getString("custom_gemini_key", "")?.trim()
         } ?: ""
@@ -1015,8 +1035,15 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                 amplitude = 0f
             )
         }
-        addLog("Voice session started. Listening for speech (Hindi / English / Hinglish)...")
-        voiceInputHandler?.startListening()
+        addLog("Voice session started safely. Listening for speech (Hindi / English / Hinglish)...")
+        viewModelScope.launch(Dispatchers.Main) {
+            try {
+                voiceInputHandler?.startListening()
+            } catch (e: Exception) {
+                Log.e("SamVoice", "Failed to start speech recognizer", e)
+                _uiState.update { it.copy(errorMessage = "Voice error: ${e.localizedMessage ?: e.message}") }
+            }
+        }
     }
 
     fun stopSession() {

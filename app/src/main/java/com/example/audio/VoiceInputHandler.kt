@@ -162,10 +162,11 @@ class VoiceInputHandler(
             }
 
             try {
-                if (speechRecognizer == null) {
-                    speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context.applicationContext).apply {
-                        setRecognitionListener(recognitionListener)
-                    }
+                speechRecognizer?.destroy()
+                speechRecognizer = null
+
+                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context.applicationContext).apply {
+                    setRecognitionListener(recognitionListener)
                 }
 
                 val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -182,10 +183,14 @@ class VoiceInputHandler(
 
                 speechRecognizer?.startListening(intent)
                 onDiagnosticLog("SpeechRecognizer started listening (hi-IN / en-IN / Hinglish)")
+            } catch (e: SecurityException) {
+                Log.e(TAG, "Microphone permission denied for SpeechRecognizer", e)
+                onDiagnosticLog("SecurityException: Microphone permission not granted")
+                onError("Microphone permission required", false)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start speech recognizer", e)
                 onDiagnosticLog("Failed to start SpeechRecognizer: ${e.message}")
-                onError("Failed to start voice listener: ${e.message}", false)
+                onError("Voice error: ${e.localizedMessage ?: e.message}", false)
             }
         }
     }

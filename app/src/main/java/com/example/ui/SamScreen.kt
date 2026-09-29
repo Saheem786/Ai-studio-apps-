@@ -87,6 +87,8 @@ fun SamScreen(
     ) { isGranted ->
         if (isGranted) {
             viewModel.startSession()
+        } else {
+            Toast.makeText(context, "Microphone permission chahiye voice mode ke liye", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -159,7 +161,22 @@ fun SamScreen(
                 )
                 AppModeToggle(
                     currentMode = uiState.currentMode,
-                    onModeSelected = { viewModel.setAppMode(it) },
+                    onModeSelected = { mode ->
+                        if (mode == AppMode.VOICE && uiState.currentMode != AppMode.VOICE) {
+                            viewModel.setAppMode(AppMode.VOICE)
+                            val hasMicPermission = ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.RECORD_AUDIO
+                            ) == PackageManager.PERMISSION_GRANTED
+                            if (!hasMicPermission) {
+                                micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            } else {
+                                viewModel.startSession()
+                            }
+                        } else {
+                            viewModel.setAppMode(mode)
+                        }
+                    },
                     modifier = Modifier.align(Alignment.CenterHorizontally)
                 )
                 Spacer(modifier = Modifier.height(4.dp))
