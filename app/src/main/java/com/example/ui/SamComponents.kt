@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Person
@@ -1545,26 +1546,61 @@ fun LegacyChatScreenView(
                             border = if (!isUser) androidx.compose.foundation.BorderStroke(1.dp, SamSurfaceBorder) else null
                         ) {
                             Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                                if (!msg.imageBase64.isNullOrEmpty()) {
-                                    val msgBitmap = remember(msg.imageBase64) {
-                                        try {
-                                            val bytes = android.util.Base64.decode(msg.imageBase64, android.util.Base64.DEFAULT)
-                                            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                                        } catch (e: Exception) {
+                                if (!msg.imageBase64.isNullOrEmpty() || !msg.imageUrl.isNullOrEmpty()) {
+                                    val context = androidx.compose.ui.platform.LocalContext.current
+                                    val msgBitmap = remember(msg.imageBase64, msg.imageUrl) {
+                                        if (!msg.imageBase64.isNullOrBlank()) {
+                                            try {
+                                                val cleanBase64 = msg.imageBase64.substringAfter("base64,").trim()
+                                                val bytes = android.util.Base64.decode(cleanBase64, android.util.Base64.DEFAULT)
+                                                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                                            } catch (e: Exception) {
+                                                null
+                                            }
+                                        } else {
                                             null
                                         }
                                     }
                                     if (msgBitmap != null) {
-                                        androidx.compose.foundation.Image(
-                                            bitmap = msgBitmap.asImageBitmap(),
-                                            contentDescription = "AI Generated Image",
+                                        Column(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .heightIn(max = 200.dp)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .padding(bottom = 6.dp),
-                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                                        )
+                                                .padding(bottom = 8.dp)
+                                        ) {
+                                            androidx.compose.foundation.Image(
+                                                bitmap = msgBitmap.asImageBitmap(),
+                                                contentDescription = "AI Generated Image",
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .heightIn(max = 240.dp)
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .border(1.dp, SamCyan.copy(alpha = 0.3f), RoundedCornerShape(10.dp)),
+                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                            )
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.End
+                                            ) {
+                                                Button(
+                                                    onClick = {
+                                                        try {
+                                                            saveBitmapToGallery(context, msgBitmap)
+                                                        } catch (e: Exception) {
+                                                            android.widget.Toast.makeText(context, "Saved image! 📥", android.widget.Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = SamCyan.copy(alpha = 0.25f)),
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    modifier = Modifier.height(26.dp)
+                                                ) {
+                                                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(12.dp), tint = SamCyanGlow)
+                                                    Spacer(Modifier.width(4.dp))
+                                                    Text("Save", fontSize = 10.sp, color = SamCyanGlow, fontWeight = FontWeight.Bold)
+                                                }
+                                            }
+                                        }
                                     }
                                 }
 

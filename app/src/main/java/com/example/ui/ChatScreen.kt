@@ -309,7 +309,8 @@ fun ChatScreenView(
                         ) {
                             val bitmap = remember(base64) {
                                 try {
-                                    val bytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+                                    val cleanBase64 = base64.substringAfter("base64,").trim()
+                                    val bytes = android.util.Base64.decode(cleanBase64, android.util.Base64.DEFAULT)
                                     android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                                 } catch (e: Exception) {
                                     null
@@ -497,12 +498,17 @@ fun ChatScreenView(
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
                                 // Message Image Attachment (if present)
-                                if (!msg.imageBase64.isNullOrEmpty()) {
-                                    val msgBitmap = remember(msg.imageBase64) {
-                                        try {
-                                            val bytes = android.util.Base64.decode(msg.imageBase64, android.util.Base64.DEFAULT)
-                                            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                                        } catch (e: Exception) {
+                                if (!msg.imageBase64.isNullOrEmpty() || !msg.imageUrl.isNullOrEmpty()) {
+                                    val msgBitmap = remember(msg.imageBase64, msg.imageUrl) {
+                                        if (!msg.imageBase64.isNullOrBlank()) {
+                                            try {
+                                                val cleanBase64 = msg.imageBase64.substringAfter("base64,").trim()
+                                                val bytes = android.util.Base64.decode(cleanBase64, android.util.Base64.DEFAULT)
+                                                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                                            } catch (e: Exception) {
+                                                null
+                                            }
+                                        } else {
                                             null
                                         }
                                     }

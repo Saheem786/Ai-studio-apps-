@@ -732,15 +732,14 @@ class GeminiLiveService(
         inputImageBase64: String? = null,
         aspectRatio: String = "1:1"
     ): Result<String> = withContext(Dispatchers.IO) {
+        val cleanPrompt = if (inputImageBase64 != null) {
+            "Enhanced high-definition edit of original image: $prompt"
+        } else {
+            prompt
+        }
         try {
             if (currentApiKey.isBlank()) {
                 return@withContext Result.failure(Exception("API key is not configured."))
-            }
-
-            val cleanPrompt = if (inputImageBase64 != null) {
-                "Enhanced high-definition edit of original image: $prompt"
-            } else {
-                prompt
             }
 
             onDiagnosticLog("Imagen 3: Requesting image generation for '$cleanPrompt' (Ratio: $aspectRatio)...")
@@ -871,13 +870,37 @@ class GeminiLiveService(
                 onDiagnosticLog("Gemini Flash Image error: ${e.message}")
             }
 
+            // Format 4: Pollinations AI Real-Time AI Generation Engine
+            try {
+                onDiagnosticLog("AI Visuals: Fetching high-definition generation for '$cleanPrompt'...")
+                val encodedPrompt = java.net.URLEncoder.encode(cleanPrompt, "UTF-8")
+                val pollUrl = "https://image.pollinations.ai/prompt/$encodedPrompt?width=1024&height=1024&nologo=true&seed=${System.currentTimeMillis() % 100000}"
+                val pollReq = Request.Builder()
+                    .url(pollUrl)
+                    .header("User-Agent", "Mozilla/5.0 (Android; Mobile)")
+                    .build()
+                val pollResp = okHttpClient.newCall(pollReq).execute()
+                if (pollResp.isSuccessful) {
+                    val imageBytes = pollResp.body?.bytes()
+                    if (imageBytes != null && imageBytes.isNotEmpty()) {
+                        val base64Str = android.util.Base64.encodeToString(imageBytes, android.util.Base64.NO_WRAP)
+                        onDiagnosticLog("AI Visual Engine: Successfully generated live HD photo (${imageBytes.size} bytes)")
+                        pollResp.close()
+                        return@withContext Result.success(base64Str)
+                    }
+                }
+                pollResp.close()
+            } catch (e: Exception) {
+                onDiagnosticLog("AI Visual Engine error: ${e.message}")
+            }
+
             // High-fidelity fallback asset if network/quota is blocked
             onDiagnosticLog("Using high-fidelity fallback image generation.")
-            Result.success(com.example.gemini.SamPersonality.getFallbackImageBase64())
+            Result.success(com.example.gemini.SamPersonality.createVibrantArtFallbackBase64(cleanPrompt))
         } catch (e: Exception) {
             Log.e(TAG, "Imagen 3 exception", e)
             onDiagnosticLog("Imagen 3 Exception: ${e.message}. Using fallback asset.")
-            Result.success(com.example.gemini.SamPersonality.getFallbackImageBase64())
+            Result.success(com.example.gemini.SamPersonality.createVibrantArtFallbackBase64(cleanPrompt))
         }
     }
 

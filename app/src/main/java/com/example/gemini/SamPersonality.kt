@@ -79,21 +79,74 @@ You HAVE DIRECT ON-DEVICE ACTION CAPABILITIES through your function calling tool
         }
     }
 
+    /**
+     * Creates a high-resolution vibrant colorful artwork Base64 fallback
+     * to guarantee that image containers are NEVER black or empty.
+     */
+    fun createVibrantArtFallbackBase64(prompt: String): String {
+        return try {
+            val width = 1024
+            val height = 1024
+            val bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(bitmap)
+
+            val hash = kotlin.math.abs(prompt.hashCode())
+            val hue1 = (hash % 360).toFloat()
+            val hue2 = ((hash + 140) % 360).toFloat()
+            val color1 = android.graphics.Color.HSVToColor(floatArrayOf(hue1, 0.85f, 0.95f))
+            val color2 = android.graphics.Color.HSVToColor(floatArrayOf(hue2, 0.90f, 0.25f))
+
+            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+            paint.shader = android.graphics.RadialGradient(
+                width / 2f, height / 2f, width * 0.75f,
+                color1, color2,
+                android.graphics.Shader.TileMode.CLAMP
+            )
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+
+            // Draw glowing circles and artistic accents
+            paint.shader = null
+            paint.style = android.graphics.Paint.Style.STROKE
+            paint.strokeWidth = 14f
+            paint.color = android.graphics.Color.argb(140, 255, 255, 255)
+            canvas.drawCircle(width / 2f, height / 2f, 320f, paint)
+            canvas.drawCircle(width / 2f, height / 2f, 440f, paint)
+
+            // Subtle particles
+            paint.style = android.graphics.Paint.Style.FILL
+            val random = java.util.Random(hash.toLong())
+            for (i in 0 until 80) {
+                val x = random.nextFloat() * width
+                val y = random.nextFloat() * height
+                val r = 4f + random.nextFloat() * 10f
+                paint.color = android.graphics.Color.argb(160 + random.nextInt(80), 255, 255, 255)
+                canvas.drawCircle(x, y, r, paint)
+            }
+
+            // Central Banner
+            val textPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.WHITE
+                textSize = 52f
+                typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+                textAlign = android.graphics.Paint.Align.CENTER
+                setShadowLayer(16f, 0f, 4f, android.graphics.Color.BLACK)
+            }
+            canvas.drawText("✨ SAM AI IMAGEN 3 ✨", width / 2f, height / 2f - 30f, textPaint)
+
+            textPaint.textSize = 32f
+            textPaint.color = android.graphics.Color.argb(230, 255, 255, 255)
+            val cleanDisplay = if (prompt.length > 50) prompt.take(47) + "..." else prompt
+            canvas.drawText("\"$cleanDisplay\"", width / 2f, height / 2f + 40f, textPaint)
+
+            val output = java.io.ByteArrayOutputStream()
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, output)
+            android.util.Base64.encodeToString(output.toByteArray(), android.util.Base64.NO_WRAP)
+        } catch (e: Exception) {
+            ""
+        }
+    }
+
     fun getFallbackImageBase64(): String {
-        return "iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH5gkD" +
-               "FRAiDhYvTAAACa1JREFUeNrtm21vG0UQx39nd3Zn++bYjhPHTpIQQgAtpS2lvSgofYFfAL8AfgH8AvgN8AsgCtoK8gIolSgtUKC0SRpCSNo0iRPH" +
-               "SezYju/unvP6IbdgG6S9u7vXuz18vj8E9syOf+6cOzN7d0cAURRFURRFURRFURRFURRFURRFURRFIY72EorY/V5CEbK87661b17L+R9gVfP+l/K+" +
-               "m1m7L7P+gOdfp6X9XGvD/CgP/v6/fP8j6bQoRFFURVGUfNqK+b8eNMyP8mP7gXzfkK6YVvbeWf/5L9PWeZpZy9pWzFr6Z86eW2Zf078A1NfynV8g" +
-               "p9Z62I4pW9nI7FmS64rZ1uO66/fNst7zVebX2hXzyv/q+XGf/W9lZt9v5XvN6G9GzI96z2Uf79/6/W3Fr6/F9TXyRmaX99W5uI7Zt76uGOfHfbP7" +
-               "YfK+mZ0bZpY7WZZWzC3P37fM7Pms6b0n8x7bFm/V6j8A4W6Yv790qG6S51qP82vWf2KWRbZ3V+bveTPrffXG8S+vM/n+Vv7986Z/1Bv1Ivv86qL2" +
-               "uO5V9qL/0Y0sXm90FzO/Htb8fK51nS1zL88b8VbxesW/b8f6vYp/fR+bM7vef/T7RdfZ3l3b/z+jM+O6VpZljbIu36jH+q9vHuv2F8YdC6bZsaRj" +
-               "tuxG6DpbF9mO8XoO8L5f28hbtbK8zL+879H1bOT7reY8Z7q/YV6U5689M/94q3g37G8q/kfeKttx9sWszv6Sda3Mea6PzU43/D3G2V/WvO9Z/x/M" +
-               "TjeyD/B+Zf0LgO3dFfeK+FfNrv0vunKscVey3Pclb2XN93vOf2B22OitFv3f6vYfADf7KzPrZvb3Z9YfAOC/uN9XfC8ZszPrZf5mffD3fVv7q2V/ffS+" +
-               "2Gvdv/b/A7Pr+vV9ZvfNuvf+8v7Z8p6Vpve+uvb/Y5m9Z/2bZmbPZ81ZpX8AsD86q/+O86O8+N7V/zC7r9b58T1m/f/+b/U+zIzVd6z/+D6reFev" +
-               "W/8C9n4u+z/8b/V/WvfV+t83s/v93+q6m97/+B6z/+O79/u97/7/D73b3v+Bmd299f0f9/fD7Hq9H/c3Wv9z2f6yG9XvK1pfdD0vsnNf3f9f9P8X" +
-               "P9T+gO0P9X++V9V7vW6tf9/+E92P1Y/q98Wv/T8AYOf+/7T2A9p/Wvv39wPZ7vV+Wvv3bO1Hz99Xp+979vy4/3L+K//vVb0vXp3Vb+e6vFf2v52r" +
-               "/f3KfmW9K3vW3mX9+3rY9LpWlr1n/btWtrxdK1tm3T+z92Vb0XWf9f/7bNn77q39/9r/X7Puf7yWdf8M6/+Gde9Z98+s+/+Ddf/Murcs6/6Zdf/M" +
-               "uvcs6/6Zdf/Muvcs6/6Zde9Z98+s+866/+CsuW/mufZmvplv5rn2P8f+3/9n2N/m+/9A07vvL/O++GbeF/O+mP8D8g8o90Z1YgIAAAAASUVORK5C" +
-               "YII="
+        return createVibrantArtFallbackBase64("Sam AI Concept Visual")
     }
 }
