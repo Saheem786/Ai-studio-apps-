@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -142,9 +143,14 @@ fun SamScreen(
         Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = SamDarkBg,
-        contentWindowInsets = WindowInsets.statusBars,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(SamDarkBg)
+                    .statusBarsPadding()
+            ) {
                 SamTopBar(
                     state = uiState.state,
                     onOpenHelp = { viewModel.toggleHelpCommandsScreen(true) },
@@ -156,6 +162,7 @@ fun SamScreen(
                     onModeSelected = { viewModel.setAppMode(it) },
                     modifier = Modifier.align(Alignment.CenterHorizontally)
                 )
+                Spacer(modifier = Modifier.height(4.dp))
             }
         }
     ) { innerPadding ->

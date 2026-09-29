@@ -125,7 +125,8 @@ fun SamTopBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .height(56.dp)
+            .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -156,66 +157,67 @@ fun SamTopBar(
                     text = "Sam Ai",
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontWeight = FontWeight.Bold,
-                        color = SamTextPrimary,
                         letterSpacing = 0.5.sp
-                    )
+                    ),
+                    color = Color.White
                 )
                 Text(
                     text = "Real-time Voice AI",
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        color = SamPurpleSecondary,
-                        fontSize = 11.sp
-                    )
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.LightGray
                 )
             }
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Help & Commands Button
             IconButton(
                 onClick = onOpenHelp,
                 modifier = Modifier
                     .size(42.dp)
-                    .clip(CircleShape)
-                    .background(SamSurfaceElevated)
+                    .background(Color(0xFF231E3D), CircleShape)
                     .testTag("help_button")
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.Help,
                     contentDescription = "Help & Commands",
-                    tint = SamCyan,
+                    tint = Color(0xFF00E5FF),
                     modifier = Modifier.size(20.dp)
                 )
             }
 
+            // Bug / Diagnostics Action Button
             IconButton(
                 onClick = onOpenDiagnostics,
                 modifier = Modifier
                     .size(42.dp)
-                    .clip(CircleShape)
-                    .background(SamSurfaceElevated)
+                    .background(Color(0xFF231E3D), CircleShape)
                     .testTag("diagnostics_button")
             ) {
                 Icon(
                     imageVector = Icons.Default.BugReport,
-                    contentDescription = "Diagnostics",
-                    tint = SamTextSecondary,
-                    modifier = Modifier.size(20.dp)
+                    contentDescription = "Debug",
+                    tint = Color(0xFF00E5FF),
+                    modifier = Modifier.size(22.dp)
                 )
             }
 
+            // Settings Action Button
             IconButton(
                 onClick = onOpenSettings,
                 modifier = Modifier
                     .size(42.dp)
-                    .clip(CircleShape)
-                    .background(SamSurfaceElevated)
+                    .background(Color(0xFF231E3D), CircleShape)
                     .testTag("settings_button")
             ) {
                 Icon(
                     imageVector = Icons.Default.Settings,
                     contentDescription = "Settings",
-                    tint = SamTextSecondary,
-                    modifier = Modifier.size(20.dp)
+                    tint = Color(0xFFB388FF),
+                    modifier = Modifier.size(22.dp)
                 )
             }
         }
