@@ -248,7 +248,7 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
     private fun initAudioSystem() {
         voiceInputHandler = VoiceInputHandler(
             context = getApplication(),
-            onReadyForSpeech = {
+            onSpeechReady = {
                 _uiState.update {
                     it.copy(
                         state = AssistantState.LISTENING,
@@ -259,16 +259,16 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 addLog("Speech recognizer ready. Listening...")
             },
-            onBeginningOfSpeech = {
+            onSpeechStarted = {
                 _uiState.update { it.copy(actionBanner = "Hearing your voice...") }
                 addLog("User speaking detected")
             },
-            onRmsChanged = { amp ->
+            onRmsAmplitudeChanged = { amp ->
                 if (_uiState.value.state == AssistantState.LISTENING) {
                     _uiState.update { it.copy(amplitude = amp) }
                 }
             },
-            onPartialResults = { partialText ->
+            onPartialTranscript = { partialText ->
                 _uiState.update {
                     it.copy(
                         transcript = "You: $partialText",
@@ -276,14 +276,14 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
             },
-            onResults = { finalText ->
+            onFinalTranscript = { finalText ->
                 processVoiceInput(finalText)
             },
-            onEndOfSpeech = {
+            onSpeechEnded = {
                 addLog("User stopped speaking")
                 _uiState.update { it.copy(amplitude = 0f) }
             },
-            onError = { errMsg, isTimeout ->
+            onErrorOccurred = { errMsg, isTimeout ->
                 addLog("Voice input status: $errMsg (timeout=$isTimeout)")
                 if (isTimeout && _uiState.value.currentMode == AppMode.VOICE && _uiState.value.isMicActive && _uiState.value.state == AssistantState.LISTENING) {
                     viewModelScope.launch {

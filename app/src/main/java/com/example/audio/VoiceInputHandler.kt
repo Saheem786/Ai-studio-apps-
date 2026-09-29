@@ -12,7 +12,6 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.util.Log
 import androidx.core.content.ContextCompat
-import java.util.Locale
 
 /**
  * Robust Speech Recognition (STT) Manager using Android's SpeechRecognizer API.
@@ -25,13 +24,13 @@ import java.util.Locale
  */
 class VoiceInputHandler(
     private val context: Context,
-    private val onReadyForSpeech: () -> Unit = {},
-    private val onBeginningOfSpeech: () -> Unit = {},
-    private val onRmsChanged: (amplitude: Float) -> Unit = {},
-    private val onPartialResults: (partialText: String) -> Unit = {},
-    private val onResults: (finalText: String) -> Unit = {},
-    private val onError: (errorMessage: String, isTimeout: Boolean) -> Unit = { _, _ -> },
-    private val onEndOfSpeech: () -> Unit = {},
+    private val onSpeechReady: () -> Unit = {},
+    private val onSpeechStarted: () -> Unit = {},
+    private val onRmsAmplitudeChanged: (amplitude: Float) -> Unit = {},
+    private val onPartialTranscript: (partialText: String) -> Unit = {},
+    private val onFinalTranscript: (finalText: String) -> Unit = {},
+    private val onErrorOccurred: (errorMessage: String, isTimeout: Boolean) -> Unit = { _, _ -> },
+    private val onSpeechEnded: () -> Unit = {},
     private val onDiagnosticLog: (String) -> Unit = {}
 ) {
 
@@ -48,18 +47,18 @@ class VoiceInputHandler(
         override fun onReadyForSpeech(params: Bundle?) {
             isListening = true
             onDiagnosticLog("SpeechRecognizer is ready for speech")
-            onReadyForSpeech()
+            onSpeechReady()
         }
 
         override fun onBeginningOfSpeech() {
             onDiagnosticLog("User started speaking")
-            onBeginningOfSpeech()
+            onSpeechStarted()
         }
 
         override fun onRmsChanged(rmsdB: Float) {
             // Normalize typical speech RMS from [-2 dB, 10 dB] into [0.0, 1.0]
             val normalized = ((rmsdB + 2f) / 12f).coerceIn(0f, 1f)
-            onRmsChanged(normalized)
+            onRmsAmplitudeChanged(normalized)
         }
 
         override fun onBufferReceived(buffer: ByteArray?) {
@@ -69,13 +68,13 @@ class VoiceInputHandler(
         override fun onEndOfSpeech() {
             onDiagnosticLog("User stopped speaking (silence detected)")
             isListening = false
-            onRmsChanged(0f)
-            onEndOfSpeech()
+            onRmsAmplitudeChanged(0f)
+            onSpeechEnded()
         }
 
         override fun onError(errorCode: Int) {
             isListening = false
-            onRmsChanged(0f)
+            onRmsAmplitudeChanged(0f)
             val isTimeout = (errorCode == SpeechRecognizer.ERROR_NO_MATCH || 
                              errorCode == SpeechRecognizer.ERROR_SPEECH_TIMEOUT)
 
@@ -94,20 +93,20 @@ class VoiceInputHandler(
 
             onDiagnosticLog("SpeechRecognizer error ($errorCode): $errorMsg")
             Log.w(TAG, "SpeechRecognizer error: $errorMsg (code: $errorCode)")
-            onError(errorMsg, isTimeout)
+            onErrorOccurred(errorMsg, isTimeout)
         }
 
         override fun onResults(results: Bundle?) {
             isListening = false
-            onRmsChanged(0f)
+            onRmsAmplitudeChanged(0f)
             val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
             val recognizedText = matches?.firstOrNull()?.trim().orEmpty()
 
             onDiagnosticLog("SpeechRecognizer final result: '$recognizedText'")
             if (recognizedText.isNotBlank()) {
-                onResults(recognizedText)
+                onFinalTranscript(recognizedText)
             } else {
-                onError("No speech recognized", true)
+                onErrorOccurred("No speech recognized", true)
             }
         }
 
@@ -115,7 +114,7 @@ class VoiceInputHandler(
             val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
             val partialText = matches?.firstOrNull()?.trim().orEmpty()
             if (partialText.isNotBlank()) {
-                onPartialResults(partialText)
+                onPartialTranscript(partialText)
             }
         }
 
@@ -150,14 +149,14 @@ class VoiceInputHandler(
             if (!hasRecordAudioPermission()) {
                 val err = "Microphone permission is required for voice recognition."
                 onDiagnosticLog("Start listening aborted: $err")
-                onError(err, false)
+                onErrorOccurred(err, false)
                 return@runOnMain
             }
 
             if (!isRecognitionAvailable()) {
                 val err = "Speech recognition service is not available on this device."
                 onDiagnosticLog("Speech recognition unavailable")
-                onError(err, false)
+                onErrorOccurred(err, false)
                 return@runOnMain
             }
 
@@ -186,11 +185,11 @@ class VoiceInputHandler(
             } catch (e: SecurityException) {
                 Log.e(TAG, "Microphone permission denied for SpeechRecognizer", e)
                 onDiagnosticLog("SecurityException: Microphone permission not granted")
-                onError("Microphone permission required", false)
+                onErrorOccurred("Microphone permission required", false)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start speech recognizer", e)
                 onDiagnosticLog("Failed to start SpeechRecognizer: ${e.message}")
-                onError("Voice error: ${e.localizedMessage ?: e.message}", false)
+                onErrorOccurred("Voice error: ${e.localizedMessage ?: e.message}", false)
             }
         }
     }
@@ -203,7 +202,7 @@ class VoiceInputHandler(
             } catch (e: Exception) {
                 Log.e(TAG, "Error stopping SpeechRecognizer", e)
             }
-            onRmsChanged(0f)
+            onRmsAmplitudeChanged(0f)
         }
     }
 
@@ -215,7 +214,7 @@ class VoiceInputHandler(
             } catch (e: Exception) {
                 Log.e(TAG, "Error cancelling SpeechRecognizer", e)
             }
-            onRmsChanged(0f)
+            onRmsAmplitudeChanged(0f)
         }
     }
 
