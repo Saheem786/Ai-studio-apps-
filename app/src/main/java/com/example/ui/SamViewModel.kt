@@ -10,6 +10,7 @@ import com.example.BuildConfig
 import com.example.audio.AudioTrackPlayer
 import com.example.audio.MicrophoneRecorder
 import com.example.audio.TextToSpeechEngine
+import com.example.audio.VoiceInputHandler
 import com.example.data.AppDatabase
 import com.example.data.ChatRepository
 import com.example.device.ContactItem
@@ -35,6 +36,7 @@ enum class AssistantState {
     IDLE,
     CONNECTING,
     LISTENING,
+    THINKING,
     SPEAKING,
     ERROR
 }
@@ -107,6 +109,7 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
     private var audioPlayer: AudioTrackPlayer? = null
     private var ttsEngine: TextToSpeechEngine? = null
     private var micRecorder: MicrophoneRecorder? = null
+    private var voiceInputHandler: VoiceInputHandler? = null
     private var geminiService: GeminiLiveService? = null
 
     private var lastSentTimestamp: Long = 0L
@@ -240,15 +243,81 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun initAudioSystem() {
+        voiceInputHandler = VoiceInputHandler(
+            context = getApplication(),
+            onReadyForSpeech = {
+                _uiState.update {
+                    it.copy(
+                        state = AssistantState.LISTENING,
+                        isMicActive = true,
+                        errorMessage = null,
+                        actionBanner = "Listening to you..."
+                    )
+                }
+                addLog("Speech recognizer ready. Listening...")
+            },
+            onBeginningOfSpeech = {
+                _uiState.update { it.copy(actionBanner = "Hearing your voice...") }
+                addLog("User speaking detected")
+            },
+            onRmsChanged = { amp ->
+                if (_uiState.value.state == AssistantState.LISTENING) {
+                    _uiState.update { it.copy(amplitude = amp) }
+                }
+            },
+            onPartialResults = { partialText ->
+                _uiState.update {
+                    it.copy(
+                        transcript = "You: $partialText",
+                        actionBanner = "Hearing: $partialText"
+                    )
+                }
+            },
+            onResults = { finalText ->
+                processVoiceInput(finalText)
+            },
+            onEndOfSpeech = {
+                addLog("User stopped speaking")
+                _uiState.update { it.copy(amplitude = 0f) }
+            },
+            onError = { errMsg, isTimeout ->
+                addLog("Voice input status: $errMsg (timeout=$isTimeout)")
+                if (isTimeout && _uiState.value.currentMode == AppMode.VOICE && _uiState.value.isMicActive && _uiState.value.state == AssistantState.LISTENING) {
+                    viewModelScope.launch {
+                        delay(400)
+                        if (_uiState.value.state == AssistantState.LISTENING && _uiState.value.isMicActive) {
+                            voiceInputHandler?.startListening()
+                        }
+                    }
+                } else if (!isTimeout) {
+                    _uiState.update { it.copy(amplitude = 0f, errorMessage = errMsg, actionBanner = errMsg) }
+                }
+            },
+            onDiagnosticLog = { logMsg ->
+                addLog(logMsg)
+            }
+        )
+
         audioPlayer = AudioTrackPlayer(
             onPlaybackStarted = {
                 _uiState.update { it.copy(state = AssistantState.SPEAKING) }
                 addLog("Speaker playback started - UI state changed to SPEAKING")
             },
             onPlaybackEnded = {
-                val nextState = if (_uiState.value.isMicActive) AssistantState.LISTENING else AssistantState.IDLE
-                _uiState.update { it.copy(state = nextState, amplitude = 0f) }
-                addLog("Speaker playback ended - UI state returned to $nextState")
+                if (_uiState.value.currentMode == AppMode.VOICE && _uiState.value.isMicActive) {
+                    _uiState.update {
+                        it.copy(
+                            state = AssistantState.LISTENING,
+                            amplitude = 0f,
+                            actionBanner = "Sam is listening..."
+                        )
+                    }
+                    voiceInputHandler?.startListening()
+                } else {
+                    val nextState = if (_uiState.value.isMicActive) AssistantState.LISTENING else AssistantState.IDLE
+                    _uiState.update { it.copy(state = nextState, amplitude = 0f) }
+                }
+                addLog("Speaker playback ended")
             },
             onAmplitudeChanged = { amp ->
                 if (_uiState.value.state == AssistantState.SPEAKING) {
@@ -270,9 +339,20 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                 addLog("TTS speech started - UI state changed to SPEAKING")
             },
             onSpeechEnded = {
-                val nextState = if (_uiState.value.isMicActive) AssistantState.LISTENING else AssistantState.IDLE
-                _uiState.update { it.copy(state = nextState, amplitude = 0f) }
-                addLog("TTS speech ended - UI state returned to $nextState")
+                addLog("TTS speech ended")
+                if (_uiState.value.currentMode == AppMode.VOICE && _uiState.value.isMicActive) {
+                    _uiState.update {
+                        it.copy(
+                            state = AssistantState.LISTENING,
+                            amplitude = 0f,
+                            actionBanner = "Sam is listening..."
+                        )
+                    }
+                    voiceInputHandler?.startListening()
+                } else {
+                    val nextState = if (_uiState.value.isMicActive) AssistantState.LISTENING else AssistantState.IDLE
+                    _uiState.update { it.copy(state = nextState, amplitude = 0f) }
+                }
             },
             onAmplitudeChanged = { amp ->
                 if (_uiState.value.state == AssistantState.SPEAKING) {
@@ -923,36 +1003,25 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
         }
         geminiService?.setApiKey(key)
 
+        audioPlayer?.interrupt()
+        ttsEngine?.stop()
+
         _uiState.update {
             it.copy(
-                state = AssistantState.CONNECTING,
+                state = AssistantState.LISTENING,
+                isMicActive = true,
                 errorMessage = null,
-                actionBanner = "Connecting to Sam..."
+                actionBanner = "Sam is listening...",
+                amplitude = 0f
             )
         }
-        addLog("User started session. Connecting Dual-Engine...")
-        geminiService?.connect(key, _uiState.value.selectedModel)
-
-        // 3-second connection supervisor: If WebSocket handshake delays, switch instantly to REST-fallback listening
-        viewModelScope.launch {
-            kotlinx.coroutines.delay(3000)
-            if (_uiState.value.state == AssistantState.CONNECTING) {
-                addLog("WebSocket handshake pending. Switching to High-Speed REST Engine...")
-                _uiState.update {
-                    it.copy(
-                        state = AssistantState.LISTENING,
-                        isMicActive = true,
-                        errorMessage = null,
-                        actionBanner = "Sam is listening..."
-                    )
-                }
-                micRecorder?.start(viewModelScope)
-            }
-        }
+        addLog("Voice session started. Listening for speech (Hindi / English / Hinglish)...")
+        voiceInputHandler?.startListening()
     }
 
     fun stopSession() {
-        addLog("User stopped session")
+        addLog("User stopped voice session")
+        voiceInputHandler?.stopListening()
         micRecorder?.stop()
         audioPlayer?.interrupt()
         ttsEngine?.stop()
@@ -965,6 +1034,47 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                 actionBanner = null
             )
         }
+    }
+
+    fun processVoiceInput(text: String) {
+        val trimmed = text.trim()
+        if (trimmed.isBlank()) {
+            if (_uiState.value.currentMode == AppMode.VOICE && _uiState.value.isMicActive) {
+                voiceInputHandler?.startListening()
+            }
+            return
+        }
+
+        addLog("Voice speech recognized: '$trimmed'")
+        _uiState.update {
+            it.copy(
+                state = AssistantState.THINKING,
+                actionBanner = "Sam is thinking...",
+                transcript = "You: $trimmed",
+                amplitude = 0f
+            )
+        }
+        voiceInputHandler?.stopListening()
+
+        // Biometric Voice Security Check if calibrated
+        if (_uiState.value.voiceMatchEnforced && _uiState.value.isVoiceCalibrationCompleted) {
+            val isMatch = voiceMatchManager.verifyVoiceMatch(0.75f)
+            if (!isMatch) {
+                val securityMsg = "⚠️ Voice mismatch. Voice action blocked by biometric guard."
+                _uiState.update {
+                    it.copy(
+                        actionBanner = securityMsg,
+                        state = AssistantState.IDLE,
+                        isMicActive = false
+                    )
+                }
+                ttsEngine?.speak("Voice mismatch. Unauthorized user.")
+                return
+            }
+        }
+
+        // Process message through full tool & LLM chat pipeline
+        sendChatMessage(trimmed)
     }
 
     /**
@@ -1904,6 +2014,7 @@ $tempo beats per minute, fading out...
 
     override fun onCleared() {
         super.onCleared()
+        voiceInputHandler?.destroy()
         micRecorder?.stop()
         audioPlayer?.release()
         ttsEngine?.release()

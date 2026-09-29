@@ -316,6 +316,7 @@ fun SamScreen(
                         AssistantState.IDLE -> SamPurplePrimary
                         AssistantState.CONNECTING -> SamCyan
                         AssistantState.LISTENING -> SamCyanGlow
+                        AssistantState.THINKING -> SamPurpleSecondary
                         AssistantState.SPEAKING -> SamMagenta
                         AssistantState.ERROR -> SamErrorRed
                     },
@@ -355,7 +356,7 @@ fun SamScreen(
                             .testTag("microphone_power_button")
                     ) {
                         when (uiState.state) {
-                            AssistantState.CONNECTING -> {
+                            AssistantState.CONNECTING, AssistantState.THINKING -> {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(32.dp),
                                     color = SamDarkBg,

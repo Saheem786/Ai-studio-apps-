@@ -140,6 +140,7 @@ fun SamTopBar(
                     AssistantState.IDLE -> SamTextMuted
                     AssistantState.CONNECTING -> SamCyan
                     AssistantState.LISTENING -> SamCyanGlow
+                    AssistantState.THINKING -> SamPurpleSecondary
                     AssistantState.SPEAKING -> SamMagenta
                     AssistantState.ERROR -> SamErrorRed
                 },
@@ -233,6 +234,7 @@ fun AssistantStatusBadge(
         AssistantState.IDLE -> Triple("Ready to Talk", SamTextSecondary, SamSurfaceElevated)
         AssistantState.CONNECTING -> Triple("Connecting Live...", SamCyan, SamSurfaceElevated)
         AssistantState.LISTENING -> Triple("Listening to You", SamCyanGlow, Color(0xFF083344))
+        AssistantState.THINKING -> Triple("Sam is Thinking...", SamPurpleSecondary, Color(0xFF2E1065))
         AssistantState.SPEAKING -> Triple("Sam Speaking", SamMagenta, Color(0xFF4A044E))
         AssistantState.ERROR -> Triple("Connection Issue", SamErrorRed, Color(0xFF450A0A))
     }

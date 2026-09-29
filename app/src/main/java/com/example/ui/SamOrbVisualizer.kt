@@ -75,6 +75,7 @@ fun SamOrbVisualizer(
         AssistantState.IDLE -> SamPurplePrimary
         AssistantState.CONNECTING -> SamCyan
         AssistantState.LISTENING -> SamCyanGlow
+        AssistantState.THINKING -> SamPurpleSecondary
         AssistantState.SPEAKING -> SamMagenta
         AssistantState.ERROR -> SamErrorRed
     }
@@ -83,6 +84,7 @@ fun SamOrbVisualizer(
         AssistantState.IDLE -> SamPurpleSecondary
         AssistantState.CONNECTING -> SamPurplePrimary
         AssistantState.LISTENING -> SamCyan
+        AssistantState.THINKING -> SamCyanGlow
         AssistantState.SPEAKING -> SamPurplePrimary
         AssistantState.ERROR -> Color(0xFFFB7185)
     }
