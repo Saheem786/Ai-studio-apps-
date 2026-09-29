@@ -162,6 +162,11 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
         val isFloatingWidgetOn = prefs.getBoolean("floating_widget_enabled", false)
         val isWakeWordOn = prefs.getBoolean("wake_word_enabled", false)
         val savedPersona = prefs.getString("current_persona", "SAM") ?: "SAM"
+        var savedModel = prefs.getString("selected_gemini_model", "gemini-3.8-flash")?.trim() ?: "gemini-3.8-flash"
+        if (savedModel == "gemini-1.5-flash" || savedModel == "gemini-2.0-flash" || savedModel == "gemini-1.5-pro") {
+            savedModel = "gemini-3.8-flash"
+            prefs.edit().putString("selected_gemini_model", savedModel).apply()
+        }
 
         val savedThemeStr = prefs.getString("theme_accent", "CLASSIC") ?: "CLASSIC"
         val themeAccent = try {
@@ -176,6 +181,7 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { 
             it.copy(
                 apiKey = initialKey, 
+                selectedModel = savedModel,
                 quickReplies = replies,
                 isVoiceCalibrationCompleted = isEnrolled,
                 voiceMatchEnforced = isEnforced && isEnrolled,
@@ -1098,6 +1104,27 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
         addLog("Gemini API key updated and saved into SharedPreferences")
     }
 
+    fun updateSettings(newKey: String, newModel: String) {
+        val trimmedKey = newKey.trim()
+        val cleanModel = newModel.trim().removePrefix("models/").ifBlank { "gemini-3.8-flash" }
+        val prefs = getApplication<Application>().getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString("gemini_api_key", trimmedKey)
+            .putString("custom_gemini_key", trimmedKey)
+            .putString("selected_gemini_model", cleanModel)
+            .commit()
+        geminiService?.setApiKey(trimmedKey)
+        _uiState.update { 
+            it.copy(
+                apiKey = trimmedKey, 
+                selectedModel = cleanModel, 
+                showSettingsDialog = false, 
+                errorMessage = null
+            ) 
+        }
+        addLog("Gemini Settings saved: API Key updated, Model set to '$cleanModel'")
+    }
+
     fun toggleDiagnosticsSheet(show: Boolean) {
         _uiState.update { it.copy(showDiagnosticsSheet = show) }
     }
@@ -1208,7 +1235,10 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                 """.trimIndent()
 
                 addLog("Generating Cinematic Video Production Blueprint for: '$prompt'")
-                val (blueprintMarkdown, _) = service.generateChatResponse(blueprintPrompt)
+                val (blueprintMarkdown, _) = service.generateChatResponse(
+                    prompt = blueprintPrompt,
+                    preferredModel = _uiState.value.selectedModel
+                )
 
                 // Extract a clean title and overview for the styled video production card
                 val titleLine = blueprintMarkdown.lines().firstOrNull { it.startsWith("# ") || it.startsWith("## ") }
@@ -1638,7 +1668,8 @@ $tempo beats per minute, fading out...
                 val (reply, audioBase64) = geminiService?.generateChatResponse(
                     prompt = text,
                     base64Image = attachedImg,
-                    isDeepResearch = isDeepResearch
+                    isDeepResearch = isDeepResearch,
+                    preferredModel = _uiState.value.selectedModel
                 ) ?: Pair("Sam is unavailable right now.", null)
                 val assistantMsg = ChatMessage(
                     sender = MessageSender.ASSISTANT,

@@ -8,9 +8,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -56,6 +59,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -581,9 +586,11 @@ fun MultipleContactsDialog(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsDialog(
     currentApiKey: String,
+    currentSelectedModel: String = "gemini-3.8-flash",
     voiceMatchEnforced: Boolean,
     onVoiceMatchEnforcedChanged: (Boolean) -> Unit,
     isVoiceCalibrationCompleted: Boolean,
@@ -597,10 +604,30 @@ fun SettingsDialog(
     onThemeAccentChanged: (AppThemeAccent) -> Unit,
     onOpenFullThemeSettings: () -> Unit,
     onOpenHelp: () -> Unit = {},
-    onSaveKey: (String) -> Unit,
+    onSaveSettings: (apiKey: String, selectedModel: String) -> Unit = { _, _ -> },
+    onSaveKey: (String) -> Unit = {},
     onDismiss: () -> Unit
 ) {
     var apiKeyText by remember { mutableStateOf(currentApiKey) }
+    val standardModels = listOf(
+        "gemini-3.8-flash",
+        "gemini-3.7-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-2.5-flash"
+    )
+    val initialCleanModel = currentSelectedModel.trim().removePrefix("models/").ifBlank { "gemini-3.8-flash" }
+    var selectedModelText by remember { 
+        mutableStateOf(
+            if (initialCleanModel == "gemini-1.5-flash" || initialCleanModel == "gemini-2.0-flash" || initialCleanModel == "gemini-1.5-pro") "gemini-3.8-flash" else initialCleanModel
+        ) 
+    }
+    var isCustomModelSelected by remember {
+        mutableStateOf(selectedModelText !in standardModels)
+    }
+    var customModelInput by remember {
+        mutableStateOf(if (selectedModelText !in standardModels) selectedModelText else "")
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -615,7 +642,11 @@ fun SettingsDialog(
             )
         },
         text = {
-            Column {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
                 Text(
                     text = "Configure Gemini API credentials and real-time voice settings.",
                     style = MaterialTheme.typography.bodySmall.copy(color = SamTextSecondary)
@@ -649,7 +680,7 @@ fun SettingsDialog(
                         .testTag("api_key_input")
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = "Key is securely stored in local app preferences or injected via Secrets panel.",
                     style = MaterialTheme.typography.bodySmall.copy(
@@ -657,6 +688,131 @@ fun SettingsDialog(
                         color = SamTextMuted
                     )
                 )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // Gemini Model Selection Section
+                Text(
+                    text = "Gemini Model Selection",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = SamCyan
+                    )
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Select active Gemini engine or enter a custom model version.",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 11.sp,
+                        color = SamTextMuted
+                    )
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                val presetModels = listOf(
+                    "gemini-3.8-flash" to "3.8 Flash (Recommended)",
+                    "gemini-3.7-flash" to "3.7 Flash",
+                    "gemini-3.6-flash" to "3.6 Flash",
+                    "gemini-3.5-flash" to "3.5 Flash",
+                    "gemini-2.5-flash" to "2.5 Flash"
+                )
+
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    presetModels.forEach { (modelId, label) ->
+                        val isSelected = !isCustomModelSelected && selectedModelText == modelId
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                isCustomModelSelected = false
+                                selectedModelText = modelId
+                            },
+                            label = {
+                                Text(
+                                    text = label,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = SamSurface,
+                                labelColor = SamTextSecondary,
+                                selectedContainerColor = SamCyan.copy(alpha = 0.2f),
+                                selectedLabelColor = SamCyan
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = isSelected,
+                                borderColor = SamSurfaceBorder,
+                                selectedBorderColor = SamCyan,
+                                borderWidth = 1.dp
+                            ),
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.testTag("model_chip_$modelId")
+                        )
+                    }
+
+                    // Custom model option chip
+                    FilterChip(
+                        selected = isCustomModelSelected,
+                        onClick = {
+                            isCustomModelSelected = true
+                            if (customModelInput.isNotBlank()) {
+                                selectedModelText = customModelInput.trim()
+                            }
+                        },
+                        label = {
+                            Text(
+                                text = "Custom Model",
+                                fontSize = 11.sp,
+                                fontWeight = if (isCustomModelSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = SamSurface,
+                            labelColor = SamTextSecondary,
+                            selectedContainerColor = SamMagenta.copy(alpha = 0.2f),
+                            selectedLabelColor = SamMagenta
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = isCustomModelSelected,
+                            borderColor = SamSurfaceBorder,
+                            selectedBorderColor = SamMagenta,
+                            borderWidth = 1.dp
+                        ),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.testTag("model_chip_custom")
+                    )
+                }
+
+                if (isCustomModelSelected) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = customModelInput,
+                        onValueChange = {
+                            customModelInput = it
+                            selectedModelText = it.trim()
+                        },
+                        placeholder = { Text("e.g. gemini-3.7-flash", color = SamTextMuted, fontSize = 12.sp) },
+                        label = { Text("Enter Model Name", color = SamMagenta, fontSize = 11.sp) },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = SamTextPrimary,
+                            unfocusedTextColor = SamTextPrimary,
+                            focusedBorderColor = SamMagenta,
+                            unfocusedBorderColor = SamSurfaceBorder,
+                            focusedContainerColor = SamSurface,
+                            unfocusedContainerColor = SamSurface
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("custom_model_input")
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(20.dp))
 
@@ -962,8 +1118,9 @@ fun SettingsDialog(
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
+                val activeModelDisplay = if (isCustomModelSelected && customModelInput.isNotBlank()) customModelInput.trim() else selectedModelText
                 Text(
-                    text = "Default Model: gemini-2.0-flash\nVoice Profile: Aoede (Expressive & Natural)",
+                    text = "Selected Model: $activeModelDisplay\nVoice Profile: Aoede (Expressive & Natural)",
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontSize = 11.sp,
                         color = SamPurpleSecondary
@@ -973,8 +1130,17 @@ fun SettingsDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onSaveKey(apiKeyText) },
-                colors = ButtonDefaults.buttonColors(containerColor = SamPurplePrimary)
+                onClick = {
+                    val finalModel = if (isCustomModelSelected && customModelInput.isNotBlank()) {
+                        customModelInput.trim()
+                    } else {
+                        selectedModelText.trim()
+                    }
+                    onSaveSettings(apiKeyText, finalModel)
+                    onSaveKey(apiKeyText)
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = SamPurplePrimary),
+                modifier = Modifier.testTag("save_settings_button")
             ) {
                 Text("Save", color = SamDarkBg, fontWeight = FontWeight.Bold)
             }

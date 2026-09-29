@@ -71,7 +71,12 @@ class GeminiLiveService(
         }
 
         currentApiKey = resolvedKey
-        activeModel = model
+        val resolvedModel = if (model.contains("1.5") || model.contains("2.0") || model.isBlank()) {
+            SamPersonality.MODEL_LIVE_PRIMARY
+        } else {
+            if (model.startsWith("models/")) model else "models/$model"
+        }
+        activeModel = resolvedModel
 
         onDiagnosticLog("Connecting to Gemini Live ($activeModel)...")
         Log.i(TAG, "Connecting to Gemini Live with model $activeModel")
@@ -335,7 +340,7 @@ class GeminiLiveService(
         if (currentApiKey.isBlank()) return@withContext false
 
         onDiagnosticLog("REST Fallback: Requesting native audio response for '$prompt'...")
-        val modelsToTry = listOf("gemini-1.5-flash", "gemini-2.0-flash")
+        val modelsToTry = listOf("gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash")
         for (m in modelsToTry) {
             try {
                 val cleanModel = m.removePrefix("models/")
@@ -685,18 +690,33 @@ class GeminiLiveService(
     suspend fun generateChatResponse(
         prompt: String,
         base64Image: String? = null,
-        isDeepResearch: Boolean = false
+        isDeepResearch: Boolean = false,
+        preferredModel: String? = null
     ): Pair<String, String?> = withContext(Dispatchers.IO) {
         if (currentApiKey.isBlank() || currentApiKey == "MY_GEMINI_API_KEY" || currentApiKey.contains("placeholder", ignoreCase = true)) {
             return@withContext Pair("⚠️ Kripya Settings (⚙️) mein jakar apni asli Gemini API Key dalein!", null)
         }
 
-        val modelsToTry = listOf("gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro")
+        val cleanPreferred = preferredModel?.trim()?.removePrefix("models/")
+        val modelsToTry = mutableListOf<String>().apply {
+            if (!cleanPreferred.isNullOrBlank() && 
+                !cleanPreferred.contains("1.5") && 
+                !cleanPreferred.contains("2.0") &&
+                !cleanPreferred.contains("1.0")) {
+                add(cleanPreferred)
+            }
+            if (!contains("gemini-3.8-flash")) add("gemini-3.8-flash")
+            if (!contains("gemini-3.7-flash")) add("gemini-3.7-flash")
+            if (!contains("gemini-3.5-flash")) add("gemini-3.5-flash")
+        }
         var response: Response? = null
         var lastErrorCode = 200
         var isNetworkError = false
 
-        for (modelName in modelsToTry) {
+        var modelIdx = 0
+        while (modelIdx < modelsToTry.size) {
+            val modelName = modelsToTry[modelIdx]
+            modelIdx++
             val cleanModel = modelName.trim().removePrefix("models/")
             onDiagnosticLog("Chat: Generating response using $cleanModel...")
 
@@ -756,12 +776,24 @@ class GeminiLiveService(
                         break // Success!
                     }
 
-                    // Log response code and error body copy using peekBody
-                    try {
-                        val errBody = callResp.peekBody(4096).string()
-                        Log.e("GeminiLiveService", "API Error Response ($cleanModel, min=$useMinimalist): ${callResp.code} - $errBody")
+                    // Check error body for suggested model
+                    val errBody = try {
+                        callResp.peekBody(4096).string()
                     } catch (pe: Exception) {
-                        Log.e("GeminiLiveService", "API Error Response ($cleanModel): ${callResp.code}")
+                        ""
+                    }
+
+                    if (callResp.code == 404) {
+                        Log.w("GeminiLiveService", "Model $cleanModel (min=$useMinimalist) returned 404: $errBody")
+                        // If error message suggests a specific model (e.g. "use models/gemini-3.8-flash")
+                        val match = Regex("models/([a-zA-Z0-9.-]+)").find(errBody)
+                        val suggested = match?.groupValues?.getOrNull(1)
+                        if (!suggested.isNullOrBlank() && !modelsToTry.contains(suggested)) {
+                            modelsToTry.add(suggested)
+                            onDiagnosticLog("Discovered supported model from API: $suggested")
+                        }
+                    } else {
+                        Log.e("GeminiLiveService", "API Error Response ($cleanModel, min=$useMinimalist): ${callResp.code} - $errBody")
                     }
 
                     callResp.close()

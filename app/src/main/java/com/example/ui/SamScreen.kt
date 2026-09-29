@@ -409,6 +409,7 @@ fun SamScreen(
     if (uiState.showSettingsDialog) {
         SettingsDialog(
             currentApiKey = uiState.apiKey,
+            currentSelectedModel = uiState.selectedModel,
             voiceMatchEnforced = uiState.voiceMatchEnforced,
             onVoiceMatchEnforcedChanged = { enabled -> viewModel.toggleVoiceMatchEnforced(enabled) },
             isVoiceCalibrationCompleted = uiState.isVoiceCalibrationCompleted,
@@ -431,6 +432,7 @@ fun SamScreen(
                 viewModel.toggleSettingsDialog(false)
                 viewModel.toggleHelpCommandsScreen(true)
             },
+            onSaveSettings = { newKey, newModel -> viewModel.updateSettings(newKey, newModel) },
             onSaveKey = { newKey -> viewModel.updateApiKey(newKey) },
             onDismiss = { viewModel.toggleSettingsDialog(false) }
         )
