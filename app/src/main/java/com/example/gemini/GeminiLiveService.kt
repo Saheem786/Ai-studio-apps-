@@ -476,6 +476,8 @@ class GeminiLiveService(
 
     /**
      * Text Chat request returning (replyText, audioBase64?)
+     * Includes single-flight execution, exponential backoff on HTTP 429,
+     * and automatic fallback to high-quota model with friendly quota messages.
      */
     suspend fun generateChatResponse(
         prompt: String,
@@ -491,20 +493,20 @@ class GeminiLiveService(
         onDiagnosticLog("🧠 Multi-Brain Router: Dispatched to $routedModel (Deep Reasoning: $isDeepReasoning)")
 
         val modelsToTry = mutableListOf<String>().apply {
-            if (!routedModel.isNullOrBlank() &&
-                !routedModel.contains("1.5") &&
-                !routedModel.contains("2.0") &&
-                !routedModel.contains("1.0")) {
+            if (!routedModel.isNullOrBlank()) {
                 add(routedModel)
             }
+            if (!contains("gemini-3.5-flash")) add("gemini-3.5-flash")
+            if (!contains("gemini-2.5-flash")) add("gemini-2.5-flash")
+            if (!contains("gemini-1.5-flash")) add("gemini-1.5-flash")
             if (!contains("gemini-3.8-flash")) add("gemini-3.8-flash")
             if (!contains("gemini-3.7-flash")) add("gemini-3.7-flash")
-            if (!contains("gemini-3.5-flash")) add("gemini-3.5-flash")
             if (!contains("gemini-3.1-pro-preview")) add("gemini-3.1-pro-preview")
         }
         var response: Response? = null
         var lastErrorCode = 200
         var isNetworkError = false
+        var hitRateLimit = false
 
         var modelIdx = 0
         while (modelIdx < modelsToTry.size) {
@@ -513,97 +515,132 @@ class GeminiLiveService(
             val cleanModel = modelName.trim().removePrefix("models/")
             onDiagnosticLog("Chat: Generating response using $cleanModel...")
 
-            // Try with full schema first, and if 400/404, retry with standard minimal payload
-            for (useMinimalist in listOf(false, true)) {
-                try {
-                    isNetworkError = false
-                    val url = "$REST_BASE_URL/models/$cleanModel:generateContent?key=$currentApiKey"
-                    val bodyJson = JSONObject().apply {
-                        val contentsArray = JSONArray().apply {
-                            put(JSONObject().apply {
-                                val partsArray = JSONArray().apply {
-                                    put(JSONObject().apply {
-                                        put("text", prompt)
-                                    })
-                                    if (!base64Image.isNullOrEmpty()) {
+            // Retry with exponential backoff on 429 (max 2 retries per model)
+            var attempts = 0
+            val maxRetries = 2
+
+            while (attempts <= maxRetries) {
+                for (useMinimalist in listOf(false, true)) {
+                    try {
+                        isNetworkError = false
+                        val url = "$REST_BASE_URL/models/$cleanModel:generateContent?key=$currentApiKey"
+                        val bodyJson = JSONObject().apply {
+                            val contentsArray = JSONArray().apply {
+                                put(JSONObject().apply {
+                                    val partsArray = JSONArray().apply {
                                         put(JSONObject().apply {
-                                            put("inlineData", JSONObject().apply {
-                                                put("mimeType", "image/jpeg")
-                                                put("data", base64Image)
-                                            })
+                                            put("text", prompt)
                                         })
+                                        if (!base64Image.isNullOrEmpty()) {
+                                            put(JSONObject().apply {
+                                                put("inlineData", JSONObject().apply {
+                                                    put("mimeType", "image/jpeg")
+                                                    put("data", base64Image)
+                                                })
+                                            })
+                                        }
                                     }
-                                }
-                                put("parts", partsArray)
-                            })
-                        }
-                        put("contents", contentsArray)
-
-                        if (!useMinimalist) {
-                            put("systemInstruction", JSONObject().apply {
-                                put("parts", JSONArray().put(JSONObject().apply {
-                                    put("text", SamPersonality.SYSTEM_INSTRUCTION.trim())
-                                }))
-                            })
-
-                            if (isDeepResearch) {
-                                put("tools", JSONArray().put(JSONObject().apply {
-                                    put("googleSearch", JSONObject())
-                                }))
-                            } else {
-                                put("tools", createToolsDeclarationsJson())
-                            }
-
-                            if (isDeepReasoning) {
-                                put("generationConfig", JSONObject().apply {
-                                    put("thinkingConfig", JSONObject().apply {
-                                        put("thinkingLevel", "high")
-                                    })
+                                    put("parts", partsArray)
                                 })
                             }
+                            put("contents", contentsArray)
+
+                            if (!useMinimalist) {
+                                put("systemInstruction", JSONObject().apply {
+                                    put("parts", JSONArray().put(JSONObject().apply {
+                                        put("text", SamPersonality.SYSTEM_INSTRUCTION.trim())
+                                    }))
+                                })
+
+                                if (isDeepResearch) {
+                                    put("tools", JSONArray().put(JSONObject().apply {
+                                        put("googleSearch", JSONObject())
+                                    }))
+                                } else {
+                                    put("tools", createToolsDeclarationsJson())
+                                }
+
+                                if (isDeepReasoning) {
+                                    put("generationConfig", JSONObject().apply {
+                                        put("thinkingConfig", JSONObject().apply {
+                                            put("thinkingLevel", "high")
+                                        })
+                                    })
+                                }
+                            }
                         }
-                    }
 
-                    val request = Request.Builder()
-                        .url(url)
-                        .post(bodyJson.toString().toRequestBody("application/json".toMediaType()))
-                        .build()
+                        val request = Request.Builder()
+                            .url(url)
+                            .post(bodyJson.toString().toRequestBody("application/json".toMediaType()))
+                            .build()
 
-                    val callResp = okHttpClient.newCall(request).execute()
-                    lastErrorCode = callResp.code
+                        val callResp = okHttpClient.newCall(request).execute()
+                        lastErrorCode = callResp.code
 
-                    if (callResp.isSuccessful) {
-                        response = callResp
-                        break // Success!
-                    }
-
-                    val errBody = try {
-                        callResp.peekBody(4096).string()
-                    } catch (pe: Exception) {
-                        ""
-                    }
-
-                    if (callResp.code == 404) {
-                        Log.w("GeminiLiveService", "Model $cleanModel (min=$useMinimalist) returned 404: $errBody")
-                        val match = Regex("models/([a-zA-Z0-9.-]+)").find(errBody)
-                        val suggested = match?.groupValues?.getOrNull(1)
-                        if (!suggested.isNullOrBlank() && !modelsToTry.contains(suggested)) {
-                            modelsToTry.add(suggested)
-                            onDiagnosticLog("Discovered supported model from API: $suggested")
+                        if (callResp.isSuccessful) {
+                            response = callResp
+                            hitRateLimit = false
+                            break // Success!
                         }
+
+                        val errBody = try {
+                            callResp.peekBody(4096).string()
+                        } catch (pe: Exception) {
+                            ""
+                        }
+
+                        if (callResp.code == 429) {
+                            hitRateLimit = true
+                            Log.w("GeminiLiveService", "HTTP 429 Rate limit on $cleanModel (attempt $attempts). Backing off...")
+                            onDiagnosticLog("API 429: Rate limit hit on $cleanModel. Exponential backoff active...")
+                            callResp.close()
+                            break // Break inner loop to apply backoff before retry or fallback
+                        } else if (callResp.code == 404) {
+                            Log.w("GeminiLiveService", "Model $cleanModel (min=$useMinimalist) returned 404: $errBody")
+                            val match = Regex("models/([a-zA-Z0-9.-]+)").find(errBody)
+                            val suggested = match?.groupValues?.getOrNull(1)
+                            if (!suggested.isNullOrBlank() && !modelsToTry.contains(suggested)) {
+                                modelsToTry.add(suggested)
+                                onDiagnosticLog("Discovered supported model from API: $suggested")
+                            }
+                        } else {
+                            Log.e("GeminiLiveService", "API Error Response ($cleanModel, min=$useMinimalist): ${callResp.code} - $errBody")
+                        }
+
+                        callResp.close()
+
+                        if (callResp.code in 401..403) {
+                            break
+                        }
+                    } catch (e: Exception) {
+                        Log.e("GeminiLiveService", "API call failed with exception: ${e.message}", e)
+                        onDiagnosticLog("Chat API exception ($cleanModel): ${e.message}")
+                        isNetworkError = true
+                    }
+                }
+
+                if (response != null && response.isSuccessful) {
+                    break
+                }
+                if (lastErrorCode in 401..403) {
+                    break
+                }
+
+                // If 429 was encountered, apply smart exponential backoff: delay(2000L * (attempts + 1))
+                if (hitRateLimit) {
+                    attempts++
+                    if (attempts <= maxRetries) {
+                        val backoffMs = 2000L * attempts
+                        onDiagnosticLog("Waiting ${backoffMs / 1000}s backoff before retry $attempts...")
+                        kotlinx.coroutines.delay(backoffMs)
                     } else {
-                        Log.e("GeminiLiveService", "API Error Response ($cleanModel, min=$useMinimalist): ${callResp.code} - $errBody")
-                    }
-
-                    callResp.close()
-
-                    if (callResp.code in 401..403) {
+                        // Max retries exceeded on this model, try next high-quota fallback model
+                        onDiagnosticLog("Max 429 retries exceeded on $cleanModel. Switching to high-quota fallback model...")
                         break
                     }
-                } catch (e: Exception) {
-                    Log.e("GeminiLiveService", "API call failed with exception: ${e.message}", e)
-                    onDiagnosticLog("Chat API exception ($cleanModel): ${e.message}")
-                    isNetworkError = true
+                } else {
+                    break
                 }
             }
 
@@ -621,11 +658,11 @@ class GeminiLiveService(
             response?.close()
 
             val errorText = when {
+                hitRateLimit || lastErrorCode == 429 -> "Google API quota limit par hai. 1 minute baad koshish karein."
                 isNetworkError -> "Internet connection check karein aur dobara try karein."
                 lastErrorCode == 400 -> "API Error 400 (Bad Request): Check API key or tools schema."
                 lastErrorCode in 401..403 -> "⚠️ API Key galat hai ya expired ho chuki hai. Kripya valid Google AI Studio key dalein."
                 lastErrorCode == 404 -> "API Error 404: Model not found. Check model configuration."
-                lastErrorCode == 429 -> "API Error 429: Rate limit exceeded. Thoda wait karein."
                 lastErrorCode == 503 -> "Server par abhi thoda zyada load hai. Kripya 30-40 seconds baad dobara try karein!"
                 else -> "API Error $lastErrorCode: Request failed. Kripya settings check karein."
             }
@@ -725,7 +762,7 @@ class GeminiLiveService(
     }
 
     /**
-     * Image Generation calling Imagen 3 endpoint directly
+     * Image Generation calling high-res generator pipeline (Pollinations Flux -> Imagen 3 -> Gemini Flash Image)
      */
     suspend fun generateImage(
         prompt: String,
@@ -738,143 +775,13 @@ class GeminiLiveService(
             prompt
         }
         try {
-            if (currentApiKey.isBlank()) {
-                return@withContext Result.failure(Exception("API key is not configured."))
-            }
+            onDiagnosticLog("AI Visual Studio: Requesting generation for '$cleanPrompt'...")
 
-            onDiagnosticLog("Imagen 3: Requesting image generation for '$cleanPrompt' (Ratio: $aspectRatio)...")
-
-            // Format 1: Imagen 3 standard predict schema
-            val imagenPredictModels = listOf(
-                "imagen-3.0-generate-002",
-                "imagen-3.0-generate-001",
-                "imagen-3.0-fast-generate-001"
-            )
-
-            for (model in imagenPredictModels) {
-                try {
-                    val url = "$REST_BASE_URL/models/$model:predict?key=$currentApiKey"
-                    val body = JSONObject().apply {
-                        put("instances", JSONArray().put(JSONObject().apply {
-                            put("prompt", cleanPrompt)
-                        }))
-                        put("parameters", JSONObject().apply {
-                            put("sampleCount", 1)
-                            put("aspectRatio", if (aspectRatio.isNotBlank()) aspectRatio else "1:1")
-                        })
-                    }
-
-                    val request = Request.Builder()
-                        .url(url)
-                        .post(body.toString().toRequestBody("application/json".toMediaType()))
-                        .build()
-
-                    val response = okHttpClient.newCall(request).execute()
-                    if (response.isSuccessful) {
-                        val respString = response.body?.string() ?: ""
-                        val json = JSONObject(respString)
-                        val predictions = json.optJSONArray("predictions")
-                        val firstPred = predictions?.optJSONObject(0)
-                        val bytesBase64 = firstPred?.optString("bytesBase64Encoded")
-                            ?: firstPred?.optString("imageBytes")
-
-                        if (!bytesBase64.isNullOrEmpty()) {
-                            onDiagnosticLog("Imagen 3 ($model): Image generated successfully (${bytesBase64.length} chars)")
-                            response.close()
-                            return@withContext Result.success(bytesBase64)
-                        }
-                    } else {
-                        val err = response.body?.string() ?: "HTTP ${response.code}"
-                        onDiagnosticLog("Imagen 3 ($model:predict) returned: $err")
-                    }
-                    response.close()
-                } catch (e: Exception) {
-                    onDiagnosticLog("Imagen 3 ($model:predict) error: ${e.message}")
-                }
-            }
-
-            // Format 2: generateImages schema
+            // Tier 1: Pollinations AI Real-Time AI Generation Engine (Flux model, 1024x1024)
             try {
-                val genUrl = "$REST_BASE_URL/models/imagen-3.0-generate-002:generateImages?key=$currentApiKey"
-                val genBody = JSONObject().apply {
-                    put("prompt", cleanPrompt)
-                    put("numberOfImages", 1)
-                    put("outputMimeType", "image/jpeg")
-                    put("aspectRatio", aspectRatio)
-                }
-                val genReq = Request.Builder()
-                    .url(genUrl)
-                    .post(genBody.toString().toRequestBody("application/json".toMediaType()))
-                    .build()
-                val genResp = okHttpClient.newCall(genReq).execute()
-                if (genResp.isSuccessful) {
-                    val respString = genResp.body?.string() ?: ""
-                    val json = JSONObject(respString)
-                    val generatedImages = json.optJSONArray("generatedImages")
-                    val firstImage = generatedImages?.optJSONObject(0)
-                    val imageObj = firstImage?.optJSONObject("image")
-                    val imageBytesBase64 = imageObj?.optString("imageBytes")
-                    if (!imageBytesBase64.isNullOrEmpty()) {
-                        onDiagnosticLog("Imagen 3 (:generateImages): Image generated successfully")
-                        genResp.close()
-                        return@withContext Result.success(imageBytesBase64)
-                    }
-                }
-                genResp.close()
-            } catch (e: Exception) {
-                onDiagnosticLog("Imagen 3 (:generateImages) error: ${e.message}")
-            }
-
-            // Format 3: Gemini 2.5 Flash Image via generateContent
-            try {
-                onDiagnosticLog("Imagen Fallback: Requesting gemini-2.5-flash-image...")
-                val flashUrl = "$REST_BASE_URL/models/gemini-2.5-flash-image:generateContent?key=$currentApiKey"
-                val flashBody = JSONObject().apply {
-                    put("contents", JSONArray().put(JSONObject().apply {
-                        put("parts", JSONArray().put(JSONObject().apply {
-                            put("text", "Generate a high quality visual photo: $cleanPrompt")
-                        }))
-                    }))
-                    put("generationConfig", JSONObject().apply {
-                        put("responseModalities", JSONArray().put("IMAGE"))
-                    })
-                }
-                val flashReq = Request.Builder()
-                    .url(flashUrl)
-                    .post(flashBody.toString().toRequestBody("application/json".toMediaType()))
-                    .build()
-                val flashResp = okHttpClient.newCall(flashReq).execute()
-                if (flashResp.isSuccessful) {
-                    val respStr = flashResp.body?.string() ?: ""
-                    val jsonObj = JSONObject(respStr)
-                    val candidates = jsonObj.optJSONArray("candidates")
-                    val candidate = candidates?.optJSONObject(0)
-                    val parts = candidate?.optJSONObject("content")?.optJSONArray("parts")
-                    if (parts != null) {
-                        for (i in 0 until parts.length()) {
-                            val p = parts.getJSONObject(i)
-                            if (p.has("inlineData")) {
-                                val inlineData = p.getJSONObject("inlineData")
-                                val b64 = inlineData.optString("data")
-                                if (!b64.isNullOrEmpty()) {
-                                    onDiagnosticLog("Gemini Flash Image: Successfully generated image")
-                                    flashResp.close()
-                                    return@withContext Result.success(b64)
-                                }
-                            }
-                        }
-                    }
-                }
-                flashResp.close()
-            } catch (e: Exception) {
-                onDiagnosticLog("Gemini Flash Image error: ${e.message}")
-            }
-
-            // Format 4: Pollinations AI Real-Time AI Generation Engine
-            try {
-                onDiagnosticLog("AI Visuals: Fetching high-definition generation for '$cleanPrompt'...")
                 val encodedPrompt = java.net.URLEncoder.encode(cleanPrompt, "UTF-8")
-                val pollUrl = "https://image.pollinations.ai/prompt/$encodedPrompt?width=1024&height=1024&nologo=true&seed=${System.currentTimeMillis() % 100000}"
+                val pollUrl = "https://image.pollinations.ai/prompt/$encodedPrompt?width=1024&height=1024&nologo=true&model=flux&seed=${System.currentTimeMillis() % 100000}"
+                onDiagnosticLog("AI Visuals: Fetching high-definition Flux generation from $pollUrl")
                 val pollReq = Request.Builder()
                     .url(pollUrl)
                     .header("User-Agent", "Mozilla/5.0 (Android; Mobile)")
@@ -882,7 +789,7 @@ class GeminiLiveService(
                 val pollResp = okHttpClient.newCall(pollReq).execute()
                 if (pollResp.isSuccessful) {
                     val imageBytes = pollResp.body?.bytes()
-                    if (imageBytes != null && imageBytes.isNotEmpty()) {
+                    if (imageBytes != null && imageBytes.size > 1000) {
                         val base64Str = android.util.Base64.encodeToString(imageBytes, android.util.Base64.NO_WRAP)
                         onDiagnosticLog("AI Visual Engine: Successfully generated live HD photo (${imageBytes.size} bytes)")
                         pollResp.close()
@@ -891,15 +798,107 @@ class GeminiLiveService(
                 }
                 pollResp.close()
             } catch (e: Exception) {
-                onDiagnosticLog("AI Visual Engine error: ${e.message}")
+                onDiagnosticLog("Pollinations Flux Engine note: ${e.message}")
             }
 
-            // High-fidelity fallback asset if network/quota is blocked
+            // Tier 2: Imagen 3 Predict API if API Key is configured
+            if (currentApiKey.isNotBlank() && currentApiKey != "MY_GEMINI_API_KEY") {
+                val imagenPredictModels = listOf(
+                    "imagen-3.0-generate-002",
+                    "imagen-3.0-generate-001",
+                    "imagen-3.0-fast-generate-001"
+                )
+
+                for (model in imagenPredictModels) {
+                    try {
+                        val url = "$REST_BASE_URL/models/$model:predict?key=$currentApiKey"
+                        val body = JSONObject().apply {
+                            put("instances", JSONArray().put(JSONObject().apply {
+                                put("prompt", cleanPrompt)
+                            }))
+                            put("parameters", JSONObject().apply {
+                                put("sampleCount", 1)
+                                put("aspectRatio", if (aspectRatio.isNotBlank()) aspectRatio else "1:1")
+                            })
+                        }
+
+                        val request = Request.Builder()
+                            .url(url)
+                            .post(body.toString().toRequestBody("application/json".toMediaType()))
+                            .build()
+
+                        val response = okHttpClient.newCall(request).execute()
+                        if (response.isSuccessful) {
+                            val respString = response.body?.string() ?: ""
+                            val json = JSONObject(respString)
+                            val predictions = json.optJSONArray("predictions")
+                            val firstPred = predictions?.optJSONObject(0)
+                            val bytesBase64 = firstPred?.optString("bytesBase64Encoded")
+                                ?: firstPred?.optString("imageBytes")
+
+                            if (!bytesBase64.isNullOrEmpty()) {
+                                onDiagnosticLog("Imagen 3 ($model): Image generated successfully (${bytesBase64.length} chars)")
+                                response.close()
+                                return@withContext Result.success(bytesBase64)
+                            }
+                        }
+                        response.close()
+                    } catch (e: Exception) {
+                        onDiagnosticLog("Imagen 3 ($model) note: ${e.message}")
+                    }
+                }
+
+                // Tier 3: Gemini 2.5 Flash Image via generateContent
+                try {
+                    val flashUrl = "$REST_BASE_URL/models/gemini-2.5-flash-image:generateContent?key=$currentApiKey"
+                    val flashBody = JSONObject().apply {
+                        put("contents", JSONArray().put(JSONObject().apply {
+                            put("parts", JSONArray().put(JSONObject().apply {
+                                put("text", "Generate a high quality visual photo: $cleanPrompt")
+                            }))
+                        }))
+                        put("generationConfig", JSONObject().apply {
+                            put("responseModalities", JSONArray().put("IMAGE"))
+                        })
+                    }
+                    val flashReq = Request.Builder()
+                        .url(flashUrl)
+                        .post(flashBody.toString().toRequestBody("application/json".toMediaType()))
+                        .build()
+                    val flashResp = okHttpClient.newCall(flashReq).execute()
+                    if (flashResp.isSuccessful) {
+                        val respStr = flashResp.body?.string() ?: ""
+                        val jsonObj = JSONObject(respStr)
+                        val candidates = jsonObj.optJSONArray("candidates")
+                        val candidate = candidates?.optJSONObject(0)
+                        val parts = candidate?.optJSONObject("content")?.optJSONArray("parts")
+                        if (parts != null) {
+                            for (i in 0 until parts.length()) {
+                                val p = parts.getJSONObject(i)
+                                if (p.has("inlineData")) {
+                                    val inlineData = p.getJSONObject("inlineData")
+                                    val b64 = inlineData.optString("data")
+                                    if (!b64.isNullOrEmpty()) {
+                                        onDiagnosticLog("Gemini Flash Image: Successfully generated image")
+                                        flashResp.close()
+                                        return@withContext Result.success(b64)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    flashResp.close()
+                } catch (e: Exception) {
+                    onDiagnosticLog("Gemini Flash Image note: ${e.message}")
+                }
+            }
+
+            // High-fidelity fallback asset if network is offline
             onDiagnosticLog("Using high-fidelity fallback image generation.")
             Result.success(com.example.gemini.SamPersonality.createVibrantArtFallbackBase64(cleanPrompt))
         } catch (e: Exception) {
-            Log.e(TAG, "Imagen 3 exception", e)
-            onDiagnosticLog("Imagen 3 Exception: ${e.message}. Using fallback asset.")
+            Log.e(TAG, "Image generation exception", e)
+            onDiagnosticLog("Image Exception: ${e.message}. Using fallback asset.")
             Result.success(com.example.gemini.SamPersonality.createVibrantArtFallbackBase64(cleanPrompt))
         }
     }

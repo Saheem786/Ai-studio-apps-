@@ -361,10 +361,10 @@ class SamTools(private val context: Context) {
 
     fun playSongOnYouTube(context: Context, searchQuery: String): SamToolResult {
         val cleanQuery = searchQuery
-            .replace(Regex("(?i)(play|chalao|suno|baja|sunao|gana|song|on youtube|youtube par|youtube pe|kholo|search)"), "")
+            .replace(Regex("(?i)(play|chalao|suno|baja|sunao|gana|song|music|on youtube|youtube par|youtube pe|kholo|search|karo|do|lagao|pe|par)"), "")
             .trim()
 
-        val effectiveQuery = if (cleanQuery.isNotBlank()) cleanQuery else searchQuery.trim().ifEmpty { "trending songs" }
+        val effectiveQuery = if (cleanQuery.isNotBlank()) cleanQuery else searchQuery.trim().ifEmpty { "trending music" }
         val encodedQuery = URLEncoder.encode(effectiveQuery, "UTF-8")
         val url = "https://www.youtube.com/results?search_query=$encodedQuery"
 
@@ -376,14 +376,14 @@ class SamTools(private val context: Context) {
 
         return try {
             context.startActivity(intent)
-            SamToolResult.Success("YouTube par '$effectiveQuery' play kar diya hai! 🎬")
+            SamToolResult.Success("YouTube par $effectiveQuery chala raha hoon! 🎵")
         } catch (e: ActivityNotFoundException) {
             try {
                 val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 }
                 context.startActivity(webIntent)
-                SamToolResult.Success("YouTube web par '$effectiveQuery' open kar diya hai! 🎬")
+                SamToolResult.Success("YouTube par $effectiveQuery chala raha hoon! 🎵")
             } catch (ex: Exception) {
                 SamToolResult.Failure("YouTube open karne mein error aaya", ex.message ?: "")
             }
@@ -393,7 +393,7 @@ class SamTools(private val context: Context) {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 }
                 context.startActivity(webIntent)
-                SamToolResult.Success("YouTube web par '$effectiveQuery' open kar diya hai! 🎬")
+                SamToolResult.Success("YouTube par $effectiveQuery chala raha hoon! 🎵")
             } catch (ex: Exception) {
                 SamToolResult.Failure("YouTube open karne mein error aaya", ex.message ?: "")
             }

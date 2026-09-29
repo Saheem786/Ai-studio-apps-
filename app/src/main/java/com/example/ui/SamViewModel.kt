@@ -109,6 +109,9 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
     private var micRecorder: MicrophoneRecorder? = null
     private var geminiService: GeminiLiveService? = null
 
+    private var lastSentTimestamp: Long = 0L
+    private var lastSentPrompt: String = ""
+
     init {
         // Observe persistent chat history from Room Database via Flow
         viewModelScope.launch {
@@ -429,7 +432,7 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                         )
                     )
                     if (_uiState.value.currentMode == AppMode.VOICE) {
-                        ttsEngine?.speak("YouTube par play kar diya hai")
+                        ttsEngine?.speak(msg)
                     }
                 }
 
@@ -1256,14 +1259,15 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
             "generate photo", "generate picture", "draw ", "banao photo", "create image",
             "create photo", "create picture", "wallpaper banao", "wallpaper do", "generate wallpaper",
             "make an image", "make a photo", "make a picture", "photo chahiye", "image chahiye",
-            "ek photo", "ek image", "ek picture", "wallpaper chahiye", "tasveer banao", "tasveer do"
+            "ek photo", "ek image", "ek picture", "wallpaper chahiye", "tasveer banao", "tasveer do",
+            "ki photo", "ki image", "ki picture", "ki drawing", "photo of", "image of", "picture of"
         )
-        return keywords.any { lower.contains(it) }
+        return keywords.any { lower.contains(it) } || (lower.endsWith(" banao") && !lower.contains("alarm") && !lower.contains("timer") && !lower.contains("routine") && !lower.contains("plan"))
     }
 
     private fun extractImagePrompt(text: String): String {
-        var prompt = text.replace(Regex("(?i)^(generate image of|generate photo of|generate picture of|create image of|create photo of|create picture of|draw an?|draw|photo do|image do|picture do|generate image|generate photo|generate picture|photo banao|image banao|picture banao|wallpaper banao|mujhe photo do|mujhe image do|ek photo do|ek image do|ek picture do)\\s*"), "")
-        prompt = prompt.replace(Regex("(?i)\\s*(ki photo do|ki photo banao|ki image banao|ki picture banao|ki image do|ki picture do|ki drawing banao|photo do|image do|picture do|ka photo do|ka photo banao|ka wallpaper banao|chahiye)$"), "")
+        var prompt = text.replace(Regex("(?i)^(generate image of|generate photo of|generate picture of|create image of|create photo of|create picture of|draw an?|draw|photo do|image do|picture do|generate image|generate photo|generate picture|photo banao|image banao|picture banao|wallpaper banao|mujhe photo do|mujhe image do|ek photo do|ek image do|ek picture do|banao)\\s*"), "")
+        prompt = prompt.replace(Regex("(?i)\\s*(ki photo do|ki photo banao|ki image banao|ki picture banao|ki image do|ki picture do|ki drawing banao|photo do|image do|picture do|ka photo do|ka photo banao|ka wallpaper banao|chahiye|banao|generate karo|bana do)$"), "")
         return prompt.trim().ifEmpty { text.trim() }
     }
 
@@ -1585,6 +1589,21 @@ $tempo beats per minute, fading out...
         val text = rawText.trim()
         if (text.isBlank()) return
 
+        // Single-flight execution lock: reject if currently processing a request
+        if (_uiState.value.isSendingChat) {
+            addLog("Single-flight Guard: Ignored message because another request is currently active.")
+            return
+        }
+
+        // Debounce protection: Reject duplicate inputs sent within 1.5 seconds
+        val now = System.currentTimeMillis()
+        if (now - lastSentTimestamp < 1500L && text.equals(lastSentPrompt, ignoreCase = true)) {
+            addLog("Debounce Guard: Ignored rapid duplicate request ('$text') sent within 1.5s.")
+            return
+        }
+        lastSentTimestamp = now
+        lastSentPrompt = text
+
         val attachedImg = _uiState.value.attachedImageBase64
         val isDeepResearch = _uiState.value.deepResearchEnabled
 
@@ -1611,7 +1630,7 @@ $tempo beats per minute, fading out...
             return
         }
 
-        // Automatic Image Generation Intent Detection (e.g. 'photo do', 'billi ki photo banao', 'generate image of cat')
+        // Automatic Image Generation Intent Detection (e.g. 'photo do', 'billi ki photo banao', 'generate image of dragon', 'dragon banao')
         if (isImageGenerationIntent(text)) {
             val extractedPrompt = extractImagePrompt(text)
             addLog("Detected image generation intent. Prompt: '$extractedPrompt'")
@@ -1622,17 +1641,18 @@ $tempo beats per minute, fading out...
         // Check if message corresponds to a common device action
         val lower = text.lowercase()
 
-        // Check for YouTube song play or search intent
-        if ((lower.contains("youtube") && (lower.contains("play") || lower.contains("chalao") || lower.contains("search") || lower.contains("suno") || lower.contains("gana") || lower.contains("song") || lower.contains("baja"))) ||
-            ((lower.contains("gana") || lower.contains("song") || lower.contains("music")) && (lower.contains("chalao") || lower.contains("play") || lower.contains("baja") || lower.contains("suno")))) {
+        // Check for YouTube song play or search intent (e.g., 'rudali song play karo', 'chalao', 'baja', 'sunao', 'suno')
+        if ((lower.contains("youtube") && (lower.contains("play") || lower.contains("chalao") || lower.contains("search") || lower.contains("suno") || lower.contains("gana") || lower.contains("song") || lower.contains("baja") || lower.contains("sunao") || lower.contains("karo"))) ||
+            ((lower.contains("gana") || lower.contains("song") || lower.contains("music") || lower.contains("track")) && (lower.contains("chalao") || lower.contains("play") || lower.contains("baja") || lower.contains("suno") || lower.contains("sunao") || lower.contains("karo") || lower.contains("do")))) {
             val cleanQuery = text
-                .replace(Regex("(?i)(play|chalao|suno|baja|sunao|gana|song|music|on youtube|youtube par|youtube pe|kholo|search|par|pe)"), "")
+                .replace(Regex("(?i)(play|chalao|suno|baja|sunao|gana|song|music|track|on youtube|youtube par|youtube pe|kholo|search|karo|do|lagao|pe|par)"), "")
                 .trim()
-            val queryToUse = if (cleanQuery.isNotBlank()) cleanQuery else text
+            val queryToUse = if (cleanQuery.isNotBlank()) cleanQuery else "trending music"
             val result = samTools.playSongOnYouTube(getApplication<Application>().applicationContext, queryToUse)
+            val spokenMessage = "YouTube par $queryToUse chala raha hoon! 🎵"
             val actionMsg = ChatMessage(
                 sender = MessageSender.ASSISTANT,
-                text = result.message,
+                text = spokenMessage,
                 isAction = true,
                 actionName = "play_youtube",
                 actionDetail = result.message
@@ -1640,9 +1660,7 @@ $tempo beats per minute, fading out...
             viewModelScope.launch {
                 chatRepository.saveMessage(actionMsg)
             }
-            if (_uiState.value.currentMode == AppMode.VOICE) {
-                ttsEngine?.speak("YouTube par play kar diya hai")
-            }
+            ttsEngine?.speak(spokenMessage)
             _uiState.update { it.copy(isSendingChat = false) }
             return
         }

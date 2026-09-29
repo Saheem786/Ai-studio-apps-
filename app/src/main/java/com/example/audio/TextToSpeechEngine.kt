@@ -45,12 +45,14 @@ class TextToSpeechEngine(
     private var pendingSpeechText: String? = null
 
     init {
-        try {
-            onDiagnosticLog("Initializing Android TextToSpeech engine...")
-            tts = TextToSpeech(context.applicationContext, this)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to instantiate Android TextToSpeech", e)
-            onDiagnosticLog("TTS creation error: ${e.message}")
+        scope.launch(Dispatchers.IO) {
+            try {
+                onDiagnosticLog("Initializing Android TextToSpeech engine asynchronously...")
+                tts = TextToSpeech(context.applicationContext, this@TextToSpeechEngine)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to instantiate Android TextToSpeech", e)
+                onDiagnosticLog("TTS creation error: ${e.message}")
+            }
         }
     }
 

@@ -50,7 +50,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import com.example.ui.theme.*
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -419,15 +423,15 @@ fun ChatScreenView(
                                 .testTag("chat_input_field")
                         )
 
-                        // Send Button
+                        // Send Button (Disabled while request is actively processing)
                         IconButton(
                             onClick = { onSendMessage(inputText) },
-                            enabled = inputText.isNotBlank() || attachedImageBase64 != null,
+                            enabled = !isSending && (inputText.isNotBlank() || attachedImageBase64 != null),
                             modifier = Modifier
                                 .size(42.dp)
                                 .clip(CircleShape)
                                 .background(
-                                    if (inputText.isNotBlank() || attachedImageBase64 != null) {
+                                    if (!isSending && (inputText.isNotBlank() || attachedImageBase64 != null)) {
                                         SamPurplePrimary
                                     } else {
                                         SamSurfaceElevated
@@ -435,12 +439,20 @@ fun ChatScreenView(
                                 )
                                 .testTag("chat_send_button")
                         ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Send,
-                                contentDescription = "Send",
-                                tint = if (inputText.isNotBlank() || attachedImageBase64 != null) SamDarkBg else SamTextMuted,
-                                modifier = Modifier.size(18.dp)
-                            )
+                            if (isSending) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = SamCyanGlow,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.Send,
+                                    contentDescription = "Send",
+                                    tint = if (inputText.isNotBlank() || attachedImageBase64 != null) SamDarkBg else SamTextMuted,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -497,9 +509,9 @@ fun ChatScreenView(
                             border = if (!isUser) androidx.compose.foundation.BorderStroke(1.dp, SamSurfaceBorder) else null
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
-                                // Message Image Attachment (if present)
+                                // Message Image Attachment (Coil AsyncImage / Base64 Bitmap)
                                 if (!msg.imageBase64.isNullOrEmpty() || !msg.imageUrl.isNullOrEmpty()) {
-                                    val msgBitmap = remember(msg.imageBase64, msg.imageUrl) {
+                                    val msgBitmap = remember(msg.imageBase64) {
                                         if (!msg.imageBase64.isNullOrBlank()) {
                                             try {
                                                 val cleanBase64 = msg.imageBase64.substringAfter("base64,").trim()
@@ -512,114 +524,154 @@ fun ChatScreenView(
                                             null
                                         }
                                     }
-                                    if (msgBitmap != null) {
-                                        Column(
+
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(bottom = 8.dp)
+                                    ) {
+                                        // AI Image Badge
+                                        Surface(
+                                            color = SamCyan.copy(alpha = 0.18f),
+                                            shape = RoundedCornerShape(6.dp),
+                                            modifier = Modifier.padding(bottom = 6.dp)
+                                        ) {
+                                            Text(
+                                                text = "🎨 AI Generated Photo",
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    color = SamCyanGlow,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 10.sp
+                                                ),
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+
+                                        Box(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(bottom = 8.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .border(1.dp, SamCyan.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                                                .clickable {
+                                                    msgBitmap?.let { previewImageBitmap = it }
+                                                }
                                         ) {
-                                            // Imagen 3 Badge
-                                            Surface(
-                                                color = SamCyan.copy(alpha = 0.18f),
-                                                shape = RoundedCornerShape(6.dp),
-                                                modifier = Modifier.padding(bottom = 6.dp)
-                                            ) {
-                                                Text(
-                                                    text = "🎨 Imagen 3 Generated Image",
-                                                    style = MaterialTheme.typography.labelSmall.copy(
-                                                        color = SamCyanGlow,
-                                                        fontWeight = FontWeight.Bold,
-                                                        fontSize = 10.sp
-                                                    ),
-                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            if (!msg.imageUrl.isNullOrBlank()) {
+                                                SubcomposeAsyncImage(
+                                                    model = msg.imageUrl,
+                                                    contentDescription = "AI Generated Image",
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .heightIn(max = 260.dp),
+                                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                                    loading = {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .height(200.dp)
+                                                                .background(SamDarkBg),
+                                                            contentAlignment = Alignment.Center
+                                                        ) {
+                                                            CircularProgressIndicator(
+                                                                modifier = Modifier.size(32.dp),
+                                                                color = SamCyanGlow
+                                                            )
+                                                        }
+                                                    },
+                                                    error = {
+                                                        if (msgBitmap != null) {
+                                                            androidx.compose.foundation.Image(
+                                                                bitmap = msgBitmap.asImageBitmap(),
+                                                                contentDescription = "Fallback AI Image",
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                                            )
+                                                        }
+                                                    }
                                                 )
-                                            }
-
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clip(RoundedCornerShape(12.dp))
-                                                    .border(1.dp, SamCyan.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
-                                                    .clickable { previewImageBitmap = msgBitmap }
-                                            ) {
+                                            } else if (msgBitmap != null) {
                                                 androidx.compose.foundation.Image(
                                                     bitmap = msgBitmap.asImageBitmap(),
                                                     contentDescription = "Generated AI Image",
                                                     modifier = Modifier
                                                         .fillMaxWidth()
-                                                        .heightIn(max = 240.dp),
+                                                        .heightIn(max = 260.dp),
                                                     contentScale = androidx.compose.ui.layout.ContentScale.Crop
                                                 )
+                                            }
 
-                                                // Tap to zoom hint overlay
-                                                Surface(
-                                                    color = Color.Black.copy(alpha = 0.55f),
-                                                    shape = RoundedCornerShape(bottomStart = 12.dp),
-                                                    modifier = Modifier.align(Alignment.TopEnd)
+                                            // Tap to zoom hint overlay
+                                            Surface(
+                                                color = Color.Black.copy(alpha = 0.55f),
+                                                shape = RoundedCornerShape(bottomStart = 12.dp),
+                                                modifier = Modifier.align(Alignment.TopEnd)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
                                                 ) {
-                                                    Row(
-                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                                                        verticalAlignment = Alignment.CenterVertically
-                                                    ) {
-                                                        Icon(
-                                                            imageVector = Icons.Default.Search,
-                                                            contentDescription = null,
-                                                            tint = Color.White,
-                                                            modifier = Modifier.size(12.dp)
-                                                        )
-                                                        Spacer(modifier = Modifier.width(3.dp))
-                                                        Text("View", style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, color = Color.White))
-                                                    }
+                                                    Icon(
+                                                        imageVector = Icons.Default.Search,
+                                                        contentDescription = null,
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(12.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(3.dp))
+                                                    Text("View", style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, color = Color.White))
                                                 }
                                             }
-                                            
-                                            Spacer(modifier = Modifier.height(6.dp))
+                                        }
+                                        
+                                        Spacer(modifier = Modifier.height(6.dp))
 
-                                            // Image Action Overlay: Download and Share buttons
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                Button(
-                                                    onClick = {
+                                        // Image Action Overlay: Download and Share buttons
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Button(
+                                                onClick = {
+                                                    if (msgBitmap != null) {
                                                         saveBitmapToGallery(context, msgBitmap)
-                                                    },
-                                                    colors = ButtonDefaults.buttonColors(
-                                                        containerColor = SamCyan.copy(alpha = 0.2f),
-                                                        contentColor = if (isUser) SamDarkBg else SamCyanGlow
-                                                    ),
-                                                    shape = RoundedCornerShape(8.dp),
-                                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                                    modifier = Modifier.height(28.dp).testTag("download_image_button")
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Download,
-                                                        contentDescription = null,
-                                                        modifier = Modifier.size(14.dp)
-                                                    )
-                                                    Spacer(modifier = Modifier.width(4.dp))
-                                                    Text("Save to Gallery", style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp))
-                                                }
-                                                Button(
-                                                    onClick = {
-                                                        shareImageBitmap(context, msgBitmap)
-                                                    },
-                                                    colors = ButtonDefaults.buttonColors(
-                                                        containerColor = SamSurfaceBorder.copy(alpha = 0.5f),
-                                                        contentColor = if (isUser) SamDarkBg else SamTextPrimary
-                                                    ),
-                                                    shape = RoundedCornerShape(8.dp),
-                                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                                    modifier = Modifier.height(28.dp).testTag("share_image_button")
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Share,
-                                                        contentDescription = null,
-                                                        modifier = Modifier.size(14.dp)
-                                                    )
-                                                    Spacer(modifier = Modifier.width(4.dp))
-                                                    Text("Share", style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp))
-                                                }
+                                                    } else if (!msg.imageUrl.isNullOrBlank()) {
+                                                        saveImageUrlToGallery(context, msg.imageUrl)
+                                                    }
+                                                },
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = SamCyan.copy(alpha = 0.2f),
+                                                    contentColor = if (isUser) SamDarkBg else SamCyanGlow
+                                                ),
+                                                shape = RoundedCornerShape(8.dp),
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                modifier = Modifier.height(28.dp).testTag("download_image_button")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Download,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Save to Gallery", style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp))
+                                            }
+                                            Button(
+                                                onClick = {
+                                                    msgBitmap?.let { shareImageBitmap(context, it) }
+                                                },
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = SamSurfaceBorder.copy(alpha = 0.5f),
+                                                    contentColor = if (isUser) SamDarkBg else SamTextPrimary
+                                                ),
+                                                shape = RoundedCornerShape(8.dp),
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                modifier = Modifier.height(28.dp).testTag("share_image_button")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Share,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Share", style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp))
                                             }
                                         }
                                     }
@@ -791,6 +843,27 @@ fun ChatScreenView(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+fun saveImageUrlToGallery(context: android.content.Context, imageUrl: String) {
+    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        try {
+            val url = java.net.URL(imageUrl)
+            val connection = url.openConnection()
+            connection.connect()
+            val input = connection.getInputStream()
+            val bitmap = android.graphics.BitmapFactory.decodeStream(input)
+            if (bitmap != null) {
+                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    saveBitmapToGallery(context, bitmap)
+                }
+            }
+        } catch (e: Exception) {
+            withContext(kotlinx.coroutines.Dispatchers.Main) {
+                Toast.makeText(context, "Could not save image: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
