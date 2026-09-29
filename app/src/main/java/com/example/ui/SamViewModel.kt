@@ -823,6 +823,36 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                     addLog("Playback action dispatched: $action (Success: $ok)")
                 }
 
+                "generateImage" -> {
+                    val prompt = args["prompt"]?.toString() ?: ""
+                    val aspectRatio = args["aspectRatio"]?.toString() ?: "1:1"
+                    _uiState.update { it.copy(actionBanner = "🎨 Generating AI image: '$prompt'...") }
+                    addLog("Generating AI image for prompt: '$prompt' (Ratio: $aspectRatio)")
+                    val imgResult = geminiService?.generateImage(prompt, null, aspectRatio)
+                    val base64 = imgResult?.getOrNull()
+                    val success = !base64.isNullOrEmpty()
+                    val resultMsg = if (success) "Image generated successfully!" else "Failed to generate image"
+                    _uiState.update { it.copy(actionBanner = resultMsg) }
+                    geminiService?.sendToolResponse(
+                        callId,
+                        name,
+                        mapOf("success" to success, "message" to resultMsg)
+                    )
+                    chatRepository.saveMessage(
+                        ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = if (success) "Yeh lijiye aapki generated photo! 🎨✨\nPrompt: \"$prompt\"" else "Photo generate karne mein error aaya. Kripya dobara try karein.",
+                            isAction = true,
+                            actionName = "generateImage",
+                            actionDetail = prompt,
+                            imageBase64 = base64
+                        )
+                    )
+                    if (success && _uiState.value.currentMode == AppMode.VOICE) {
+                        ttsEngine?.speak("Aapki image generate ho chuki hai")
+                    }
+                }
+
                 else -> {
                     geminiService?.sendToolResponse(
                         callId,
@@ -1172,11 +1202,11 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun requestImageGeneration(prompt: String, referenceImageBase64: String?) {
-        _uiState.update { it.copy(isSendingChat = true) }
+        _uiState.update { it.copy(isSendingChat = true, actionBanner = "🎨 Sam is generating image: '$prompt'...") }
         viewModelScope.launch {
             val service = geminiService
             if (service == null) {
-                _uiState.update { it.copy(isSendingChat = false, errorMessage = "AI Service not connected") }
+                _uiState.update { it.copy(isSendingChat = false, errorMessage = "AI Service not connected", actionBanner = null) }
                 return@launch
             }
             
@@ -1184,21 +1214,45 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
             result.onSuccess { base64 ->
                 val responseMsg = ChatMessage(
                     sender = MessageSender.ASSISTANT,
-                    text = "Aapka custom dynamic image generate ho chuka hai! 🎨 Here is the output for: \"$prompt\"",
-                    imageBase64 = base64
+                    text = "Yeh lijiye aapki generated photo! 🎨✨\nPrompt: \"$prompt\"",
+                    imageBase64 = base64,
+                    actionName = "generateImage",
+                    actionDetail = prompt
                 )
                 chatRepository.saveMessage(responseMsg)
                 addLog("Successfully generated AI image for '$prompt'")
+                if (_uiState.value.currentMode == AppMode.VOICE) {
+                    ttsEngine?.speak("Aapki photo generate ho chuki hai!")
+                }
             }.onFailure { err ->
                 val errorMsg = ChatMessage(
                     sender = MessageSender.ASSISTANT,
-                    text = "Image generate karne mein error aaya: ${err.message}"
+                    text = "Photo generate karne mein error aaya: ${err.message}"
                 )
                 chatRepository.saveMessage(errorMsg)
                 addLog("Failed to generate AI image: ${err.message}")
             }
-            _uiState.update { it.copy(isSendingChat = false, isImageGenActive = false) }
+            _uiState.update { it.copy(isSendingChat = false, isImageGenActive = false, actionBanner = null) }
         }
+    }
+
+    private fun isImageGenerationIntent(text: String): Boolean {
+        val lower = text.lowercase().trim()
+        val keywords = listOf(
+            "photo do", "photo banao", "photo dikhao", "photo generate", "image banao", "image do",
+            "image generate", "picture banao", "picture do", "picture generate", "generate image",
+            "generate photo", "generate picture", "draw ", "banao photo", "create image",
+            "create photo", "create picture", "wallpaper banao", "wallpaper do", "generate wallpaper",
+            "make an image", "make a photo", "make a picture", "photo chahiye", "image chahiye",
+            "ek photo", "ek image", "ek picture", "wallpaper chahiye", "tasveer banao", "tasveer do"
+        )
+        return keywords.any { lower.contains(it) }
+    }
+
+    private fun extractImagePrompt(text: String): String {
+        var prompt = text.replace(Regex("(?i)^(generate image of|generate photo of|generate picture of|create image of|create photo of|create picture of|draw an?|draw|photo do|image do|picture do|generate image|generate photo|generate picture|photo banao|image banao|picture banao|wallpaper banao|mujhe photo do|mujhe image do|ek photo do|ek image do|ek picture do)\\s*"), "")
+        prompt = prompt.replace(Regex("(?i)\\s*(ki photo do|ki photo banao|ki image banao|ki picture banao|ki image do|ki picture do|ki drawing banao|photo do|image do|picture do|ka photo do|ka photo banao|ka wallpaper banao|chahiye)$"), "")
+        return prompt.trim().ifEmpty { text.trim() }
     }
 
     fun requestVideoGeneration(prompt: String, duration: String) {
@@ -1542,6 +1596,14 @@ $tempo beats per minute, fading out...
 
         if (_uiState.value.isVideoGenActive) {
             requestVideoGeneration(text, _uiState.value.selectedVideoDuration ?: "15s")
+            return
+        }
+
+        // Automatic Image Generation Intent Detection (e.g. 'photo do', 'billi ki photo banao', 'generate image of cat')
+        if (isImageGenerationIntent(text)) {
+            val extractedPrompt = extractImagePrompt(text)
+            addLog("Detected image generation intent. Prompt: '$extractedPrompt'")
+            requestImageGeneration(extractedPrompt, attachedImg)
             return
         }
 

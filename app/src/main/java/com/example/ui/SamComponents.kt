@@ -22,12 +22,14 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -1492,6 +1494,29 @@ fun LegacyChatScreenView(
                             border = if (!isUser) androidx.compose.foundation.BorderStroke(1.dp, SamSurfaceBorder) else null
                         ) {
                             Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                                if (!msg.imageBase64.isNullOrEmpty()) {
+                                    val msgBitmap = remember(msg.imageBase64) {
+                                        try {
+                                            val bytes = android.util.Base64.decode(msg.imageBase64, android.util.Base64.DEFAULT)
+                                            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                                        } catch (e: Exception) {
+                                            null
+                                        }
+                                    }
+                                    if (msgBitmap != null) {
+                                        androidx.compose.foundation.Image(
+                                            bitmap = msgBitmap.asImageBitmap(),
+                                            contentDescription = "AI Generated Image",
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(max = 200.dp)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .padding(bottom = 6.dp),
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                        )
+                                    }
+                                }
+
                                 Text(
                                     text = msg.text,
                                     style = MaterialTheme.typography.bodyMedium.copy(

@@ -15,6 +15,7 @@ data class ChatMessageEntity(
     val isAction: Boolean = false,
     val actionName: String? = null,
     val actionDetail: String? = null,
+    val imageUrl: String? = null,
     val imageBase64: String? = null,
     val videoUrl: String? = null,
     val videoDuration: String? = null
@@ -33,6 +34,7 @@ data class ChatMessageEntity(
             isAction = isAction,
             actionName = actionName,
             actionDetail = actionDetail,
+            imageUrl = imageUrl,
             imageBase64 = imageBase64,
             videoUrl = videoUrl,
             videoDuration = videoDuration
@@ -49,6 +51,7 @@ data class ChatMessageEntity(
                 isAction = msg.isAction,
                 actionName = msg.actionName,
                 actionDetail = msg.actionDetail,
+                imageUrl = msg.imageUrl,
                 imageBase64 = msg.imageBase64,
                 videoUrl = msg.videoUrl,
                 videoDuration = msg.videoDuration

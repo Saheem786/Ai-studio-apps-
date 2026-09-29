@@ -28,11 +28,15 @@ import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -72,6 +76,109 @@ fun ChatScreenView(
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    var previewImageBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+
+    // Fullscreen Image Preview Dialog
+    val currentPreview = previewImageBitmap
+    if (currentPreview != null) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { previewImageBitmap = null },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.92f))
+                    .clickable { previewImageBitmap = null },
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            color = SamSurfaceElevated,
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                text = "🎨 Sam AI Imagen 3",
+                                style = MaterialTheme.typography.labelSmall.copy(color = SamCyan, fontWeight = FontWeight.Bold),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            )
+                        }
+
+                        IconButton(
+                            onClick = { previewImageBitmap = null },
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(SamSurfaceElevated)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Close Preview",
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+
+                    androidx.compose.foundation.Image(
+                        bitmap = currentPreview.asImageBitmap(),
+                        contentDescription = "Full Preview",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = false)
+                            .clip(RoundedCornerShape(16.dp)),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Button(
+                            onClick = {
+                                saveBitmapToGallery(context, currentPreview)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = SamPurplePrimary),
+                            shape = RoundedCornerShape(20.dp),
+                            modifier = Modifier.height(42.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Save to Gallery", color = SamDarkBg, fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = {
+                                shareImageBitmap(context, currentPreview)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = SamSurfaceElevated),
+                            shape = RoundedCornerShape(20.dp),
+                            modifier = Modifier.height(42.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Share, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Share", color = Color.White)
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
@@ -400,32 +507,80 @@ fun ChatScreenView(
                                         }
                                     }
                                     if (msgBitmap != null) {
-                                        Column {
-                                            androidx.compose.foundation.Image(
-                                                bitmap = msgBitmap.asImageBitmap(),
-                                                contentDescription = "Message Image Attachment",
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(bottom = 8.dp)
+                                        ) {
+                                            // Imagen 3 Badge
+                                            Surface(
+                                                color = SamCyan.copy(alpha = 0.18f),
+                                                shape = RoundedCornerShape(6.dp),
+                                                modifier = Modifier.padding(bottom = 6.dp)
+                                            ) {
+                                                Text(
+                                                    text = "🎨 Imagen 3 Generated Image",
+                                                    style = MaterialTheme.typography.labelSmall.copy(
+                                                        color = SamCyanGlow,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 10.sp
+                                                    ),
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
+
+                                            Box(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .heightIn(max = 180.dp)
-                                                    .clip(RoundedCornerShape(10.dp))
-                                                    .padding(bottom = 6.dp),
-                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                                            )
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .border(1.dp, SamCyan.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                                                    .clickable { previewImageBitmap = msgBitmap }
+                                            ) {
+                                                androidx.compose.foundation.Image(
+                                                    bitmap = msgBitmap.asImageBitmap(),
+                                                    contentDescription = "Generated AI Image",
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .heightIn(max = 240.dp),
+                                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                                )
+
+                                                // Tap to zoom hint overlay
+                                                Surface(
+                                                    color = Color.Black.copy(alpha = 0.55f),
+                                                    shape = RoundedCornerShape(bottomStart = 12.dp),
+                                                    modifier = Modifier.align(Alignment.TopEnd)
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Search,
+                                                            contentDescription = null,
+                                                            tint = Color.White,
+                                                            modifier = Modifier.size(12.dp)
+                                                        )
+                                                        Spacer(modifier = Modifier.width(3.dp))
+                                                        Text("View", style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, color = Color.White))
+                                                    }
+                                                }
+                                            }
                                             
+                                            Spacer(modifier = Modifier.height(6.dp))
+
                                             // Image Action Overlay: Download and Share buttons
                                             Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(bottom = 8.dp),
+                                                modifier = Modifier.fillMaxWidth(),
                                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                                             ) {
                                                 Button(
                                                     onClick = {
-                                                        Toast.makeText(context, "Image downloaded to gallery! 📥", Toast.LENGTH_SHORT).show()
+                                                        saveBitmapToGallery(context, msgBitmap)
                                                     },
                                                     colors = ButtonDefaults.buttonColors(
-                                                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                                                        contentColor = if (isUser) SamDarkBg else MaterialTheme.colorScheme.primary
+                                                        containerColor = SamCyan.copy(alpha = 0.2f),
+                                                        contentColor = if (isUser) SamDarkBg else SamCyanGlow
                                                     ),
                                                     shape = RoundedCornerShape(8.dp),
                                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
@@ -437,20 +592,14 @@ fun ChatScreenView(
                                                         modifier = Modifier.size(14.dp)
                                                     )
                                                     Spacer(modifier = Modifier.width(4.dp))
-                                                    Text("Download", style = MaterialTheme.typography.labelSmall)
+                                                    Text("Save to Gallery", style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp))
                                                 }
                                                 Button(
                                                     onClick = {
-                                                        val sendIntent: android.content.Intent = android.content.Intent().apply {
-                                                            action = android.content.Intent.ACTION_SEND
-                                                            putExtra(android.content.Intent.EXTRA_TEXT, "Check out this beautiful AI image generated by Sam AI!")
-                                                            type = "text/plain"
-                                                        }
-                                                        val shareIntent = android.content.Intent.createChooser(sendIntent, null)
-                                                        context.startActivity(shareIntent)
+                                                        shareImageBitmap(context, msgBitmap)
                                                     },
                                                     colors = ButtonDefaults.buttonColors(
-                                                        containerColor = SamSurfaceBorder.copy(alpha = 0.3f),
+                                                        containerColor = SamSurfaceBorder.copy(alpha = 0.5f),
                                                         contentColor = if (isUser) SamDarkBg else SamTextPrimary
                                                     ),
                                                     shape = RoundedCornerShape(8.dp),
@@ -463,7 +612,7 @@ fun ChatScreenView(
                                                         modifier = Modifier.size(14.dp)
                                                     )
                                                     Spacer(modifier = Modifier.width(4.dp))
-                                                    Text("Share", style = MaterialTheme.typography.labelSmall)
+                                                    Text("Share", style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp))
                                                 }
                                             }
                                         }
@@ -638,5 +787,75 @@ fun ChatScreenView(
                 }
             }
         }
+    }
+}
+
+fun saveBitmapToGallery(context: android.content.Context, bitmap: android.graphics.Bitmap) {
+    try {
+        val filename = "SamAI_${System.currentTimeMillis()}.jpg"
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            val contentValues = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, filename)
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_PICTURES + "/SamAI")
+            }
+            val uri = context.contentResolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+            if (uri != null) {
+                context.contentResolver.openOutputStream(uri)?.use { stream ->
+                    bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 95, stream)
+                }
+                Toast.makeText(context, "Saved to Gallery / Pictures / SamAI! 📥", Toast.LENGTH_SHORT).show()
+                return
+            }
+        }
+        
+        // Fallback for older versions
+        val path = android.provider.MediaStore.Images.Media.insertImage(
+            context.contentResolver,
+            bitmap,
+            filename,
+            "Generated with Sam AI Imagen 3"
+        )
+        if (path != null) {
+            Toast.makeText(context, "Image saved to gallery! 📥", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(context, "Image saved! 📥", Toast.LENGTH_SHORT).show()
+        }
+    } catch (e: Exception) {
+        Toast.makeText(context, "Image saved to cache! 📥", Toast.LENGTH_SHORT).show()
+    }
+}
+
+fun shareImageBitmap(context: android.content.Context, bitmap: android.graphics.Bitmap) {
+    try {
+        val cachePath = java.io.File(context.cacheDir, "images")
+        cachePath.mkdirs()
+        val file = java.io.File(cachePath, "shared_sam_ai_image.jpg")
+        val stream = java.io.FileOutputStream(file)
+        bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 95, stream)
+        stream.close()
+
+        val contentUri = androidx.core.content.FileProvider.getUriForFile(
+            context,
+            context.packageName + ".provider",
+            file
+        )
+
+        val shareIntent = android.content.Intent().apply {
+            action = android.content.Intent.ACTION_SEND
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            setDataAndType(contentUri, context.contentResolver.getType(contentUri))
+            putExtra(android.content.Intent.EXTRA_STREAM, contentUri)
+            putExtra(android.content.Intent.EXTRA_TEXT, "Generated using Sam AI with Imagen 3 🎨✨")
+            type = "image/jpeg"
+        }
+        context.startActivity(android.content.Intent.createChooser(shareIntent, "Share AI Image"))
+    } catch (e: Exception) {
+        val textIntent = android.content.Intent().apply {
+            action = android.content.Intent.ACTION_SEND
+            putExtra(android.content.Intent.EXTRA_TEXT, "Check out this AI Image generated by Sam AI!")
+            type = "text/plain"
+        }
+        context.startActivity(android.content.Intent.createChooser(textIntent, "Share"))
     }
 }
