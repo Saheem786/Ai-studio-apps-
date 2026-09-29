@@ -3,11 +3,7 @@ package com.example.gemini
 import android.util.Log
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -71,7 +67,7 @@ class GeminiLiveService(
         }
 
         currentApiKey = resolvedKey
-        val resolvedModel = if (model.contains("1.5") || model.contains("2.0") || model.isBlank()) {
+        val resolvedModel = if (model.contains("1.5") || model.contains("2.0") || model.isBlank() || model.contains("auto", ignoreCase = true) || model.contains("Autonomous", ignoreCase = true)) {
             SamPersonality.MODEL_LIVE_PRIMARY
         } else {
             if (model.startsWith("models/")) model else "models/$model"
@@ -250,101 +246,119 @@ class GeminiLiveService(
     }
 
     /**
-     * Send Realtime Microphone PCM audio chunk to Gemini Live
+     * Send Real-Time PCM Audio to Gemini Live WebSocket session
      */
-    fun sendAudioChunk(base64Data: String) {
+    fun sendAudioChunk(base64Pcm: String, mimeType: String = "audio/pcm;rate=16000") {
         if (!isConnected.get() || webSocket == null) return
 
         try {
-            val payload = JSONObject().apply {
-                put("realtimeInput", JSONObject().apply {
-                    put("mediaChunks", JSONArray().put(JSONObject().apply {
-                        put("mimeType", "audio/pcm;rate=16000")
-                        put("data", base64Data)
-                    }))
-                })
-            }.toString()
-
-            webSocket?.send(payload)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error sending realtime audio chunk", e)
-        }
-    }
-
-    /**
-     * Send User Text to Gemini Live session
-     */
-    fun sendUserText(text: String) {
-        if (!isConnected.get() || webSocket == null) {
-            // If not connected, trigger connect then send
-            if (currentApiKey.isNotBlank()) {
-                connect(currentApiKey)
-            }
-            return
-        }
-
-        try {
-            onTranscriptReceived(text, true)
-            val payload = JSONObject().apply {
-                put("clientContent", JSONObject().apply {
-                    put("turns", JSONArray().put(JSONObject().apply {
-                        put("role", "user")
-                        put("parts", JSONArray().put(JSONObject().apply {
-                            put("text", text)
-                        }))
-                    }))
-                    put("turnComplete", true)
-                })
-            }.toString()
-
-            onDiagnosticLog("Sending user prompt to Gemini Live: '$text'")
-            webSocket?.send(payload)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error sending user text", e)
-            onDiagnosticLog("Error sending prompt: ${e.message}")
-        }
-    }
-
-    /**
-     * Send Tool Response back to Gemini Live
-     */
-    fun sendToolResponse(callId: String, functionName: String, output: Map<String, Any>) {
-        if (!isConnected.get() || webSocket == null) return
-
-        try {
-            val outputJson = JSONObject()
-            output.forEach { (k, v) -> outputJson.put(k, v) }
-
-            val payload = JSONObject().apply {
-                put("toolResponse", JSONObject().apply {
-                    put("functionResponses", JSONArray().put(JSONObject().apply {
-                        put("id", callId)
-                        put("response", JSONObject().apply {
-                            put("output", outputJson)
+            val realtimeInputJson = JSONObject().apply {
+                val realtimeInputObj = JSONObject().apply {
+                    val mediaChunksArray = JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("mimeType", mimeType)
+                            put("data", base64Pcm)
                         })
-                    }))
-                })
-            }.toString()
+                    }
+                    put("mediaChunks", mediaChunksArray)
+                }
+                put("realtimeInput", realtimeInputObj)
+            }
 
-            onDiagnosticLog("Sending tool response for $functionName back to Gemini ($callId)")
-            webSocket?.send(payload)
+            webSocket?.send(realtimeInputJson.toString())
+        } catch (e: Exception) {
+            Log.e(TAG, "Error sending audio chunk", e)
+        }
+    }
+
+    /**
+     * Send Text input to Gemini Live session
+     */
+    fun sendTextMessage(text: String) {
+        if (!isConnected.get() || webSocket == null) return
+
+        try {
+            val clientContentJson = JSONObject().apply {
+                val clientContentObj = JSONObject().apply {
+                    val turnsArray = JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("role", "user")
+                            val partsArray = JSONArray().apply {
+                                put(JSONObject().apply {
+                                    put("text", text)
+                                })
+                            }
+                            put("parts", partsArray)
+                        })
+                    }
+                    put("turns", turnsArray)
+                    put("turnComplete", true)
+                }
+                put("clientContent", clientContentObj)
+            }
+
+            onDiagnosticLog("Sending text to Live session: '$text'")
+            webSocket?.send(clientContentJson.toString())
+        } catch (e: Exception) {
+            Log.e(TAG, "Error sending text message", e)
+            onDiagnosticLog("Send text error: ${e.message}")
+        }
+    }
+
+    fun sendUserText(text: String) {
+        sendTextMessage(text)
+    }
+
+    suspend fun generateRestAudioFallback(prompt: String): Boolean = generateNativeAudioFallback(prompt)
+
+    /**
+     * Send Tool Execution Result back to Gemini WebSocket session
+     */
+    fun sendToolResponse(callId: String, functionName: String, responseData: Map<String, Any?>) {
+        if (!isConnected.get() || webSocket == null) return
+
+        try {
+            val toolResponseJson = JSONObject().apply {
+                val toolResponseObj = JSONObject().apply {
+                    val functionResponsesArray = JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("id", callId)
+                            put("name", functionName)
+                            put("response", JSONObject(responseData))
+                        })
+                    }
+                    put("functionResponses", functionResponsesArray)
+                }
+                put("toolResponse", toolResponseObj)
+            }
+
+            onDiagnosticLog("Sending tool response for $functionName (id: $callId)...")
+            webSocket?.send(toolResponseJson.toString())
         } catch (e: Exception) {
             Log.e(TAG, "Error sending tool response", e)
+            onDiagnosticLog("Tool response error: ${e.message}")
         }
     }
 
     /**
-     * Fallback REST Native Audio Generation
+     * REST Fallback for Native Voice Audio Generation
      */
-    suspend fun generateRestAudioFallback(prompt: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun generateNativeAudioFallback(prompt: String): Boolean = withContext(Dispatchers.IO) {
         if (currentApiKey.isBlank()) return@withContext false
 
-        onDiagnosticLog("REST Fallback: Requesting native audio response for '$prompt'...")
-        val modelsToTry = listOf("gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash")
-        for (m in modelsToTry) {
+        val fallbackModels = listOf(
+            "gemini-3.8-flash",
+            "gemini-3.7-flash",
+            "gemini-3.5-flash",
+            "gemini-2.5-flash-native-audio-preview-12-2025"
+        )
+
+        for (m in fallbackModels) {
             try {
                 val cleanModel = m.removePrefix("models/")
-                val url = "https://generativelanguage.googleapis.com/v1beta/models/$cleanModel:generateContent?key=$currentApiKey"
+                onDiagnosticLog("REST Native Audio: Requesting response from $cleanModel...")
+                val url = "$REST_BASE_URL/models/$cleanModel:generateContent?key=$currentApiKey"
+
                 val bodyJson = JSONObject().apply {
                     put("contents", JSONArray().put(JSONObject().apply {
                         put("parts", JSONArray().put(JSONObject().apply {
@@ -430,281 +444,38 @@ class GeminiLiveService(
 
     private fun createToolsDeclarationsJson(): JSONArray {
         return JSONArray().put(JSONObject().apply {
-            val funcs = JSONArray()
-
-            funcs.put(JSONObject().apply {
-                put("name", "openWhatsApp")
-                put("description", "Open WhatsApp messenger application or web link on the user's phone")
-            })
-
-            funcs.put(JSONObject().apply {
-                put("name", "openApp")
-                put("description", "Open a supported application on the user's device (WhatsApp, YouTube, Instagram, Maps, Chrome, Camera, Calculator, Settings, Clock, Spotify)")
-                put("parameters", JSONObject().apply {
-                    put("type", "OBJECT")
-                    put("properties", JSONObject().apply {
-                        put("appName", JSONObject().apply {
-                            put("type", "STRING")
-                            put("description", "Name of the app to open (e.g. YouTube, WhatsApp, Instagram, Chrome, Maps, Spotify, Calculator, Camera)")
-                        })
-                    })
-                    put("required", JSONArray().put("appName"))
-                })
-            })
-
-            funcs.put(JSONObject().apply {
-                put("name", "generateImage")
-                put("description", "Generate a photo, image, artwork, illustration or visual picture using Google Imagen 3. Call this tool whenever the user asks to generate, create, draw, or provide a photo or picture (e.g. 'photo do', 'generate image of a cybernetic cat', 'ek car ki photo banao', 'create a wallpaper', etc.).")
-                put("parameters", JSONObject().apply {
-                    put("type", "OBJECT")
-                    put("properties", JSONObject().apply {
-                        put("prompt", JSONObject().apply {
-                            put("type", "STRING")
-                            put("description", "The descriptive visual prompt in English for the image generation model (e.g. 'A high resolution photograph of a majestic white tiger in snowfall, cinematic lighting')")
-                        })
-                        put("aspectRatio", JSONObject().apply {
-                            put("type", "STRING")
-                            put("description", "The aspect ratio for the image: '1:1', '16:9', '9:16', '4:3', or '3:4'. Default is '1:1'")
-                        })
-                    })
-                    put("required", JSONArray().put("prompt"))
-                })
-            })
-
-            funcs.put(JSONObject().apply {
-                put("name", "openWebsite")
-                put("description", "Open a website in the device's web browser")
-                put("parameters", JSONObject().apply {
-                    put("type", "OBJECT")
-                    put("properties", JSONObject().apply {
-                        put("url", JSONObject().apply {
-                            put("type", "STRING")
-                            put("description", "The website URL to open (must start with https://)")
-                        })
-                    })
-                    put("required", JSONArray().put("url"))
-                })
-            })
-
-            funcs.put(JSONObject().apply {
-                put("name", "makeCall")
-                put("description", "Open phone dialer or initiate a call to a specific phone number")
-                put("parameters", JSONObject().apply {
-                    put("type", "OBJECT")
-                    put("properties", JSONObject().apply {
-                        put("phoneNumber", JSONObject().apply {
-                            put("type", "STRING")
-                            put("description", "The phone number to call")
-                        })
-                    })
-                    put("required", JSONArray().put("phoneNumber"))
-                })
-            })
-
-            funcs.put(JSONObject().apply {
-                put("name", "callContact")
-                put("description", "Search device contacts by contact name (e.g. Mom, Mummy, Dad, Rahul) and initiate a phone call or dialer")
-                put("parameters", JSONObject().apply {
-                    put("type", "OBJECT")
-                    put("properties", JSONObject().apply {
-                        put("contactName", JSONObject().apply {
-                            put("type", "STRING")
-                            put("description", "The name of the contact to call")
-                        })
-                    })
-                    put("required", JSONArray().put("contactName"))
-                })
-            })
-
-            funcs.put(JSONObject().apply {
-                put("name", "toggleFlashlight")
-                put("description", "Toggle the device flashlight/torch mode on or off")
-                put("parameters", JSONObject().apply {
-                    put("type", "OBJECT")
-                    put("properties", JSONObject().apply {
-                        put("enable", JSONObject().apply {
-                            put("type", "BOOLEAN")
-                            put("description", "Set to true to turn on the flashlight, or false to turn it off")
-                        })
-                    })
-                    put("required", JSONArray().put("enable"))
-                })
-            })
-
-            funcs.put(JSONObject().apply {
-                put("name", "adjustVolume")
-                put("description", "Adjust or set the device system music volume")
-                put("parameters", JSONObject().apply {
-                    put("type", "OBJECT")
-                    put("properties", JSONObject().apply {
-                        put("action", JSONObject().apply {
-                            put("type", "STRING")
-                            put("description", "The volume adjustment action: UP, DOWN, MAX, MUTE, or SET")
-                        })
-                        put("level", JSONObject().apply {
-                            put("type", "INTEGER")
-                            put("description", "The level percentage from 0 to 100 (only required when action is SET)")
-                        })
-                    })
-                    put("required", JSONArray().put("action"))
-                })
-            })
-
-            funcs.put(JSONObject().apply {
-                put("name", "getBatteryStatus")
-                put("description", "Check the current battery status, charging state, and power level of the device")
-            })
-
-            funcs.put(JSONObject().apply {
-                put("name", "setAlarm")
-                put("description", "Set a custom system alarm at a specific hour and minute")
-                put("parameters", JSONObject().apply {
-                    put("type", "OBJECT")
-                    put("properties", JSONObject().apply {
-                        put("hour", JSONObject().apply {
-                            put("type", "INTEGER")
-                            put("description", "The alarm hour in 24-hour format (0-23)")
-                        })
-                        put("minute", JSONObject().apply {
-                            put("type", "INTEGER")
-                            put("description", "The alarm minute (0-59)")
-                        })
-                        put("label", JSONObject().apply {
-                            put("type", "STRING")
-                            put("description", "A text description/label for the alarm")
-                        })
-                    })
-                    put("required", JSONArray().put("hour").put("minute").put("label"))
-                })
-            })
-
-            funcs.put(JSONObject().apply {
-                put("name", "sendWhatsAppMessage")
-                put("description", "Open WhatsApp with a message populated to a recipient")
-                put("parameters", JSONObject().apply {
-                    put("type", "OBJECT")
-                    put("properties", JSONObject().apply {
-                        put("recipient", JSONObject().apply {
-                            put("type", "STRING")
-                            put("description", "Phone number or recipient name")
-                        })
-                        put("message", JSONObject().apply {
-                            put("type", "STRING")
-                            put("description", "The message text to send")
-                        })
-                    })
-                    put("required", JSONArray().put("recipient").put("message"))
-                })
-            })
-
-            funcs.put(JSONObject().apply {
-                put("name", "dialContact")
-                put("description", "Initiate a phone call dialer with a phone number")
-                put("parameters", JSONObject().apply {
-                    put("type", "OBJECT")
-                    put("properties", JSONObject().apply {
-                        put("phoneNumber", JSONObject().apply {
-                            put("type", "STRING")
-                            put("description", "The telephone number to dial")
-                        })
-                    })
-                    put("required", JSONArray().put("phoneNumber"))
-                })
-            })
-
-            funcs.put(JSONObject().apply {
-                put("name", "toggleFloatingWidget")
-                put("description", "Toggle the floating Jarvis widget overlay on or off")
-                put("parameters", JSONObject().apply {
-                    put("type", "OBJECT")
-                    put("properties", JSONObject().apply {
-                        put("enable", JSONObject().apply {
-                            put("type", "BOOLEAN")
-                            put("description", "Set to true to show the floating orb widget, or false to hide it")
-                        })
-                    })
-                    put("required", JSONArray().put("enable"))
-                })
-            })
-
-            funcs.put(JSONObject().apply {
-                put("name", "scheduleCalendarEvent")
-                put("description", "Schedule an event in the device calendar with a title, startTimeInMillis, and durationMinutes")
-                put("parameters", JSONObject().apply {
-                    put("type", "OBJECT")
-                    put("properties", JSONObject().apply {
-                        put("title", JSONObject().apply {
-                            put("type", "STRING")
-                            put("description", "The title of the calendar event")
-                        })
-                        put("time", JSONObject().apply {
-                            put("type", "INTEGER")
-                            put("description", "The start time of the event in milliseconds from epoch")
-                        })
-                        put("duration", JSONObject().apply {
-                            put("type", "INTEGER")
-                            put("description", "The duration of the event in minutes")
-                        })
-                        put("notes", JSONObject().apply {
-                            put("type", "STRING")
-                            put("description", "Additional description or notes for the event")
-                        })
-                    })
-                    put("required", JSONArray().put("title").put("time").put("duration"))
-                })
-            })
-
-            funcs.put(JSONObject().apply {
-                put("name", "checkSchedule")
-                put("description", "Check today's scheduled calendar events")
-            })
-
-            funcs.put(JSONObject().apply {
-                put("name", "playSong")
-                put("description", "Play a song using Spotify or YouTube Music")
-                put("parameters", JSONObject().apply {
-                    put("type", "OBJECT")
-                    put("properties", JSONObject().apply {
-                        put("songName", JSONObject().apply {
-                            put("type", "STRING")
-                            put("description", "Name of the song or query to search for")
-                        })
-                        put("app", JSONObject().apply {
-                            put("type", "STRING")
-                            put("description", "The streaming service name (e.g., spotify or youtube)")
-                        })
-                    })
-                    put("required", JSONArray().put("songName").put("app"))
-                })
-            })
-
-            funcs.put(JSONObject().apply {
-                put("name", "controlPlayback")
-                put("description", "Control media playback like play, pause, next, or skip")
-                put("parameters", JSONObject().apply {
-                    put("type", "OBJECT")
-                    put("properties", JSONObject().apply {
-                        put("action", JSONObject().apply {
-                            put("type", "STRING")
-                            put("description", "Playback action: PLAY, PAUSE, NEXT, or PREVIOUS")
-                        })
-                    })
-                    put("required", JSONArray().put("action"))
-                })
-            })
-
-            put("functionDeclarations", funcs)
+            put("functionDeclarations", com.example.device.SamTools.getSamToolDeclarationsJson())
         })
     }
 
     /**
+     * Intent-Based Multi-Engine Dynamic Router (Multi-Brain Orchestration):
+     * - Deep Reasoning / Math / Logic / Coding: Route to gemini-3.1-pro-preview with thinking mode
+     * - Speed / Casual Voice / Multimodal Vision: Route to gemini-3.8-flash
+     * - Creative Writing & Scaffolding: Route with God-mode prompt
+     */
+    fun determineOptimalBrain(prompt: String, userSelectedModel: String?): Pair<String, Boolean> {
+        val cleanModel = userSelectedModel?.trim()?.removePrefix("models/") ?: ""
+        val lower = prompt.lowercase()
+        val isDeepReasoning = lower.contains("solve") || lower.contains("code") || lower.contains("math") ||
+                lower.contains("logic") || lower.contains("algorithm") || lower.contains("calculate") ||
+                lower.contains("derive") || lower.contains("step by step") || lower.contains("deep reasoning") ||
+                lower.contains("explain why") || lower.contains("architecture") || lower.contains("debug") ||
+                lower.contains("proof") || lower.contains("quantum") || lower.contains("integral")
+
+        if (cleanModel.isNotBlank() && cleanModel != "auto" && !cleanModel.contains("Autonomous", ignoreCase = true)) {
+            return Pair(cleanModel, isDeepReasoning)
+        }
+
+        return if (isDeepReasoning) {
+            Pair("gemini-3.1-pro-preview", true)
+        } else {
+            Pair("gemini-3.8-flash", false)
+        }
+    }
+
+    /**
      * Text Chat request returning (replyText, audioBase64?)
-     * Supports:
-     * - Base64 Image passing
-     * - Deep Research Mode (Google Search grounding integration)
-     * - Research Grounding Sources extraction
-     * - HTTP 429/503 automatic exponential backoff retry + automatic model fallback
-     * - Hindi-language friendly load failure messages
      */
     suspend fun generateChatResponse(
         prompt: String,
@@ -716,17 +487,20 @@ class GeminiLiveService(
             return@withContext Pair("⚠️ Kripya Settings (⚙️) mein jakar apni asli Gemini API Key dalein!", null)
         }
 
-        val cleanPreferred = preferredModel?.trim()?.removePrefix("models/")
+        val (routedModel, isDeepReasoning) = determineOptimalBrain(prompt, preferredModel)
+        onDiagnosticLog("🧠 Multi-Brain Router: Dispatched to $routedModel (Deep Reasoning: $isDeepReasoning)")
+
         val modelsToTry = mutableListOf<String>().apply {
-            if (!cleanPreferred.isNullOrBlank() && 
-                !cleanPreferred.contains("1.5") && 
-                !cleanPreferred.contains("2.0") &&
-                !cleanPreferred.contains("1.0")) {
-                add(cleanPreferred)
+            if (!routedModel.isNullOrBlank() &&
+                !routedModel.contains("1.5") &&
+                !routedModel.contains("2.0") &&
+                !routedModel.contains("1.0")) {
+                add(routedModel)
             }
             if (!contains("gemini-3.8-flash")) add("gemini-3.8-flash")
             if (!contains("gemini-3.7-flash")) add("gemini-3.7-flash")
             if (!contains("gemini-3.5-flash")) add("gemini-3.5-flash")
+            if (!contains("gemini-3.1-pro-preview")) add("gemini-3.1-pro-preview")
         }
         var response: Response? = null
         var lastErrorCode = 200
@@ -743,7 +517,7 @@ class GeminiLiveService(
             for (useMinimalist in listOf(false, true)) {
                 try {
                     isNetworkError = false
-                    val url = "https://generativelanguage.googleapis.com/v1beta/models/$cleanModel:generateContent?key=$currentApiKey"
+                    val url = "$REST_BASE_URL/models/$cleanModel:generateContent?key=$currentApiKey"
                     val bodyJson = JSONObject().apply {
                         val contentsArray = JSONArray().apply {
                             put(JSONObject().apply {
@@ -779,6 +553,14 @@ class GeminiLiveService(
                             } else {
                                 put("tools", createToolsDeclarationsJson())
                             }
+
+                            if (isDeepReasoning) {
+                                put("generationConfig", JSONObject().apply {
+                                    put("thinkingConfig", JSONObject().apply {
+                                        put("thinkingLevel", "high")
+                                    })
+                                })
+                            }
                         }
                     }
 
@@ -795,7 +577,6 @@ class GeminiLiveService(
                         break // Success!
                     }
 
-                    // Check error body for suggested model
                     val errBody = try {
                         callResp.peekBody(4096).string()
                     } catch (pe: Exception) {
@@ -804,7 +585,6 @@ class GeminiLiveService(
 
                     if (callResp.code == 404) {
                         Log.w("GeminiLiveService", "Model $cleanModel (min=$useMinimalist) returned 404: $errBody")
-                        // If error message suggests a specific model (e.g. "use models/gemini-3.8-flash")
                         val match = Regex("models/([a-zA-Z0-9.-]+)").find(errBody)
                         val suggested = match?.groupValues?.getOrNull(1)
                         if (!suggested.isNullOrBlank() && !modelsToTry.contains(suggested)) {
@@ -817,7 +597,6 @@ class GeminiLiveService(
 
                     callResp.close()
 
-                    // If 401, 403, key is invalid, do not retry
                     if (callResp.code in 401..403) {
                         break
                     }
@@ -840,7 +619,7 @@ class GeminiLiveService(
             val responseMsg = response?.let { " HTTP ${it.code}" } ?: ""
             onDiagnosticLog("Chat generation failed completely$responseMsg")
             response?.close()
-            
+
             val errorText = when {
                 isNetworkError -> "Internet connection check karein aur dobara try karein."
                 lastErrorCode == 400 -> "API Error 400 (Bad Request): Check API key or tools schema."
@@ -885,48 +664,20 @@ class GeminiLiveService(
                         }
                         if (responseText.isBlank()) {
                             responseText = when (name) {
-                                "openWhatsApp" -> "WhatsApp open kar diya hai! 💬"
-                                "openApp" -> {
+                                "open_app", "openApp" -> {
                                     val targetApp = argsMap["appName"]?.toString() ?: "App"
                                     "$targetApp open kar diya hai! 🚀"
                                 }
-                                "openWebsite" -> "Website browser mein open kar diya hai! 🌐"
-                                "callContact" -> {
-                                    val contact = argsMap["contactName"]?.toString() ?: "Contact"
-                                    "$contact ko call mila diya hai. 📞"
+                                "send_whatsapp", "sendWhatsAppMessage" -> "WhatsApp open kar diya hai, message ready hai! 💬"
+                                "set_timer_or_alarm", "setAlarm", "setTimer" -> {
+                                    val lbl = argsMap["label"]?.toString() ?: "Alert"
+                                    "Alarm / Timer successfully set for '$lbl'! ⏰"
                                 }
-                                "makeCall" -> {
-                                    val number = argsMap["phoneNumber"]?.toString() ?: "Number"
-                                    "$number par call mila diya hai. 📞"
-                                }
-                                "toggleFlashlight" -> {
-                                    val enable = argsMap["enable"] as? Boolean ?: true
-                                    if (enable) "Flashlight turned on! 🔦" else "Flashlight turned off! 🔦"
-                                }
-                                "adjustVolume" -> {
-                                    val action = argsMap["action"]?.toString() ?: "UP"
-                                    val level = (argsMap["level"] as? Number)?.toInt()
-                                    "Volume adjustment triggered: $action ($level%) 🔊"
-                                }
-                                "getBatteryStatus" -> "Checking current battery status... 🔋"
-                                "setAlarm" -> {
-                                    val hr = (argsMap["hour"] as? Number)?.toInt() ?: 7
-                                    val min = (argsMap["minute"] as? Number)?.toInt() ?: 0
-                                    val lbl = argsMap["label"]?.toString() ?: "Alarm"
-                                    "Alarm successfully set for $hr:$min ($lbl) ⏰"
-                                }
-                                "sendWhatsAppMessage" -> {
-                                    val recipient = argsMap["recipient"]?.toString() ?: ""
-                                    "WhatsApp open kar diya hai, message ready hai sir."
-                                }
-                                "dialContact" -> {
-                                    val num = argsMap["phoneNumber"]?.toString() ?: ""
-                                    "Dialer open ho gaya hai for $num. 📞"
-                                }
-                                "toggleFloatingWidget" -> {
-                                    val enable = argsMap["enable"] as? Boolean ?: true
-                                    if (enable) "Floating Jarvis widget has been enabled! 🔮" else "Floating Jarvis widget has been disabled! 🔮"
-                                }
+                                "device_status", "getDeviceStatus" -> "Checking device hardware status... 📱"
+                                "generate_image", "generateImage" -> "Generating AI image with Imagen 3... 🎨"
+                                "toggle_flashlight", "toggleFlashlight" -> "Flashlight state toggled! 🔦"
+                                "adjust_volume", "adjustVolume" -> "Volume adjusted! 🔊"
+                                "make_call", "makeCall" -> "Dialer opened for call! 📞"
                                 else -> "Action $name execute kar diya hai."
                             }
                         }
@@ -961,7 +712,7 @@ class GeminiLiveService(
             }
 
             if (responseText.isBlank()) {
-                responseText = "Sam: I am here, but I didn't get any text response."
+                responseText = "Sam: I am here, how can I help you?"
             }
 
             onDiagnosticLog("Chat response received: '${responseText.take(60)}...'")
@@ -994,7 +745,7 @@ class GeminiLiveService(
 
             onDiagnosticLog("Imagen 3: Requesting image generation for '$cleanPrompt' (Ratio: $aspectRatio)...")
 
-            // Format 1: Imagen 3 standard predict schema (as specified)
+            // Format 1: Imagen 3 standard predict schema
             val imagenPredictModels = listOf(
                 "imagen-3.0-generate-002",
                 "imagen-3.0-generate-001",
@@ -1136,11 +887,8 @@ class GeminiLiveService(
     suspend fun generateVideoClip(prompt: String, durationSeconds: Int): Result<String> = withContext(Dispatchers.IO) {
         try {
             onDiagnosticLog("Google Veo: Launching video rendering pipeline for '$prompt' (Duration: ${durationSeconds}s)...")
-            
-            // Simulating rendering delay for realism and outstanding UX feedback
             kotlinx.coroutines.delay(2000)
             
-            // Elegant premium scenic stock loops suitable for the prompt
             val videoUrl = when {
                 prompt.lowercase().contains("space") || prompt.lowercase().contains("galaxy") || prompt.lowercase().contains("star") -> {
                     "https://storage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4"

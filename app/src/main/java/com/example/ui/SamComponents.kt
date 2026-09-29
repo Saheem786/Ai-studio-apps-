@@ -612,16 +612,16 @@ fun SettingsDialog(
 ) {
     var apiKeyText by remember { mutableStateOf(currentApiKey) }
     val standardModels = listOf(
+        "Autonomous Smart Routing",
         "gemini-3.8-flash",
+        "gemini-3.1-pro-preview",
         "gemini-3.7-flash",
-        "gemini-3.6-flash",
-        "gemini-3.5-flash",
-        "gemini-2.5-flash"
+        "gemini-3.5-flash"
     )
-    val initialCleanModel = currentSelectedModel.trim().removePrefix("models/").ifBlank { "gemini-3.8-flash" }
+    val initialCleanModel = currentSelectedModel.trim().removePrefix("models/").ifBlank { "Autonomous Smart Routing" }
     var selectedModelText by remember { 
         mutableStateOf(
-            if (initialCleanModel == "gemini-1.5-flash" || initialCleanModel == "gemini-2.0-flash" || initialCleanModel == "gemini-1.5-pro") "gemini-3.8-flash" else initialCleanModel
+            if (initialCleanModel == "gemini-1.5-flash" || initialCleanModel == "gemini-2.0-flash" || initialCleanModel == "gemini-1.5-pro") "Autonomous Smart Routing" else initialCleanModel
         ) 
     }
     var isCustomModelSelected by remember {
@@ -650,7 +650,7 @@ fun SettingsDialog(
                     .verticalScroll(rememberScrollState())
             ) {
                 Text(
-                    text = "Configure Gemini API credentials and real-time voice settings.",
+                    text = "Configure Gemini Multi-Brain architecture, API credentials, and native Jarvis system tools.",
                     style = MaterialTheme.typography.bodySmall.copy(color = SamTextSecondary)
                 )
                 Spacer(modifier = Modifier.height(14.dp))
@@ -695,7 +695,7 @@ fun SettingsDialog(
 
                 // Gemini Model Selection Section
                 Text(
-                    text = "Gemini Model Selection",
+                    text = "Multi-Brain Model Orchestration",
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontWeight = FontWeight.Bold,
                         color = SamCyan
@@ -703,7 +703,7 @@ fun SettingsDialog(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Select active Gemini engine or enter a custom model version.",
+                    text = "Choose autonomous dynamic routing or lock a preferred engine.",
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontSize = 11.sp,
                         color = SamTextMuted
@@ -712,11 +712,11 @@ fun SettingsDialog(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 val presetModels = listOf(
-                    "gemini-3.8-flash" to "3.8 Flash (Recommended)",
+                    "Autonomous Smart Routing" to "⚡ Smart Routing (Auto)",
+                    "gemini-3.8-flash" to "3.8 Flash (Ultra-Fast)",
+                    "gemini-3.1-pro-preview" to "3.1 Pro (Deep Reasoning)",
                     "gemini-3.7-flash" to "3.7 Flash",
-                    "gemini-3.6-flash" to "3.6 Flash",
-                    "gemini-3.5-flash" to "3.5 Flash",
-                    "gemini-2.5-flash" to "2.5 Flash"
+                    "gemini-3.5-flash" to "3.5 Flash"
                 )
 
                 FlowRow(
@@ -753,7 +753,7 @@ fun SettingsDialog(
                                 borderWidth = 1.dp
                             ),
                             shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.testTag("model_chip_$modelId")
+                            modifier = Modifier.testTag("model_chip_${modelId.replace(" ", "_")}")
                         )
                     }
 
@@ -814,6 +814,57 @@ fun SettingsDialog(
                             .fillMaxWidth()
                             .testTag("custom_model_input")
                     )
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // Jarvis Active Tools & On-Device System Capabilities
+                Text(
+                    text = "Jarvis Native System Capabilities",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = SamCyan
+                    )
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Surface(
+                    color = SamSurface,
+                    shape = RoundedCornerShape(10.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, SamSurfaceBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("⚡", fontSize = 12.sp)
+                            Spacer(Modifier.width(6.dp))
+                            Text("App Launcher (`open_app`): YouTube, WhatsApp, Camera, Settings, etc.", fontSize = 11.sp, color = SamTextSecondary)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("💬", fontSize = 12.sp)
+                            Spacer(Modifier.width(6.dp))
+                            Text("WhatsApp Messaging (`send_whatsapp`): Prefilled chat dispatch", fontSize = 11.sp, color = SamTextSecondary)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("⏰", fontSize = 12.sp)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Alarm & Timer (`set_timer_or_alarm`): Native Android clock alerts", fontSize = 11.sp, color = SamTextSecondary)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("📊", fontSize = 12.sp)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Device Telemetry (`device_status`): Battery, Wi-Fi, Storage, Brightness", fontSize = 11.sp, color = SamTextSecondary)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("🎨", fontSize = 12.sp)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Native AI Visuals (`generate_image`): Google Imagen 3 engine", fontSize = 11.sp, color = SamTextSecondary)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("🔦", fontSize = 12.sp)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Hardware Controls: Flashlight torch, volume level, dialer", fontSize = 11.sp, color = SamTextSecondary)
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(20.dp))

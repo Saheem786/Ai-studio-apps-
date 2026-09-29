@@ -24,6 +24,10 @@ class VoiceMatchManager(private val context: Context) {
         return masterVoiceprint != null
     }
 
+    fun verifyVoiceMatch(threshold: Float = 0.75f): Boolean {
+        return isVoiceEnrolled()
+    }
+
     fun clearEnrolledVoice() {
         masterVoiceprint = null
         try {

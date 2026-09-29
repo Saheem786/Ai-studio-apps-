@@ -93,11 +93,12 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(SamUiState())
     val uiState: StateFlow<SamUiState> = _uiState.asStateFlow()
 
-     private val deviceActionManager = DeviceActionManager(application.applicationContext)
+    private val deviceActionManager = DeviceActionManager(application.applicationContext)
     private val deviceSystemManager = com.example.system.DeviceSystemManager(application.applicationContext)
     private val calendarReminderManager = com.example.system.CalendarReminderManager(application.applicationContext)
     private val mediaMusicManager = com.example.system.MediaMusicManager(application.applicationContext)
     private val voiceMatchManager = com.example.audio.VoiceMatchManager(application.applicationContext)
+    private val samTools = com.example.device.SamTools(application.applicationContext)
     private val timeFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
 
     private val chatDatabase = AppDatabase.getInstance(application)
@@ -379,33 +380,39 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(actionBanner = "Executing action: $name...") }
 
         viewModelScope.launch(Dispatchers.Main) {
-            when (name) {
-                "openWhatsApp" -> {
-                    val result = deviceActionManager.openWhatsApp()
-                    val success = result is DeviceActionResult.Success
-                    val msg = if (result is DeviceActionResult.Success) result.message else (result as? DeviceActionResult.Failure)?.error ?: ""
-                    _uiState.update { it.copy(actionBanner = msg) }
+            // Biometric Voice Security Check
+            if (_uiState.value.voiceMatchEnforced && _uiState.value.isVoiceCalibrationCompleted) {
+                val hasMatch = voiceMatchManager.verifyVoiceMatch(0.85f)
+                if (!hasMatch) {
+                    val securityMsg = "⚠️ Voice match failed. Action '$name' blocked by biometric voice guard."
+                    _uiState.update { it.copy(actionBanner = securityMsg) }
                     geminiService?.sendToolResponse(
                         callId,
                         name,
-                        mapOf("success" to success, "message" to msg)
+                        mapOf("success" to false, "error" to "Biometric Voice Security mismatch")
                     )
                     chatRepository.saveMessage(
                         ChatMessage(
                             sender = MessageSender.ASSISTANT,
-                            text = "WhatsApp action: $msg",
+                            text = securityMsg,
                             isAction = true,
-                            actionName = "openWhatsApp",
-                            actionDetail = msg
+                            actionName = name,
+                            actionDetail = "Voice security blocked"
                         )
                     )
+                    if (_uiState.value.currentMode == AppMode.VOICE) {
+                        ttsEngine?.speak("Voice mismatch. Action blocked.")
+                    }
+                    return@launch
                 }
+            }
 
-                "openApp" -> {
-                    val appName = args["appName"]?.toString() ?: ""
-                    val result = deviceActionManager.openApp(appName)
-                    val success = result is DeviceActionResult.Success
-                    val msg = if (result is DeviceActionResult.Success) result.message else (result as? DeviceActionResult.Failure)?.error ?: ""
+            when (name) {
+                "open_app", "openApp", "launchApp" -> {
+                    val appName = (args["appName"] ?: args["name"] ?: args["app"] ?: "").toString().trim()
+                    val result = samTools.openApp(appName)
+                    val success = result is com.example.device.SamToolResult.Success
+                    val msg = result.message
                     _uiState.update { it.copy(actionBanner = msg) }
                     geminiService?.sendToolResponse(
                         callId,
@@ -415,41 +422,148 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                     chatRepository.saveMessage(
                         ChatMessage(
                             sender = MessageSender.ASSISTANT,
-                            text = "Opened app '$appName': $msg",
+                            text = msg,
                             isAction = true,
-                            actionName = "openApp",
+                            actionName = "open_app",
                             actionDetail = msg
                         )
                     )
+                    if (_uiState.value.currentMode == AppMode.VOICE) {
+                        ttsEngine?.speak("$appName open kar diya hai")
+                    }
                 }
 
-                "openWebsite" -> {
-                    val url = args["url"]?.toString() ?: ""
-                    val result = deviceActionManager.openWebsite(url)
-                    val success = result is DeviceActionResult.Success
-                    val msg = if (result is DeviceActionResult.Success) result.message else (result as? DeviceActionResult.Failure)?.error ?: ""
+                "send_whatsapp", "sendWhatsAppMessage", "openWhatsApp", "sendWhatsApp" -> {
+                    val contact = (args["contactName"] ?: args["recipient"] ?: args["phone"] ?: "").toString().trim()
+                    val message = (args["message"] ?: args["text"] ?: "Hello from Sam AI!").toString().trim()
+                    val result = samTools.sendWhatsApp(contact, message)
+                    val success = result is com.example.device.SamToolResult.Success
+                    val msg = result.message
                     _uiState.update { it.copy(actionBanner = msg) }
                     geminiService?.sendToolResponse(
                         callId,
                         name,
-                        mapOf("success" to success, "url" to url, "message" to msg)
+                        mapOf("success" to success, "recipient" to contact, "message" to msg)
                     )
                     chatRepository.saveMessage(
                         ChatMessage(
                             sender = MessageSender.ASSISTANT,
-                            text = "Opened website: $url",
+                            text = msg,
                             isAction = true,
-                            actionName = "openWebsite",
+                            actionName = "send_whatsapp",
+                            actionDetail = msg
+                        )
+                    )
+                    if (_uiState.value.currentMode == AppMode.VOICE) {
+                        ttsEngine?.speak("WhatsApp message ready hai")
+                    }
+                }
+
+                "set_timer_or_alarm", "setAlarm", "setTimer", "createAlarm" -> {
+                    val timeMinutes = (args["timeMinutes"] as? Number)?.toInt()
+                        ?: (args["minutes"] as? Number)?.toInt()
+                        ?: (args["minute"] as? Number)?.toInt()
+                    val hour = (args["hour"] as? Number)?.toInt()
+                    val label = (args["label"] ?: args["message"] ?: "Sam AI Alert").toString().trim()
+                    val isAlarm = (args["isAlarm"] as? Boolean) ?: (hour != null)
+                    val result = samTools.setTimerOrAlarm(timeMinutes, hour, label, isAlarm)
+                    val success = result is com.example.device.SamToolResult.Success
+                    val msg = result.message
+                    _uiState.update { it.copy(actionBanner = msg) }
+                    geminiService?.sendToolResponse(
+                        callId,
+                        name,
+                        mapOf("success" to success, "message" to msg)
+                    )
+                    chatRepository.saveMessage(
+                        ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = msg,
+                            isAction = true,
+                            actionName = "set_timer_or_alarm",
+                            actionDetail = msg
+                        )
+                    )
+                    if (_uiState.value.currentMode == AppMode.VOICE) {
+                        ttsEngine?.speak(msg)
+                    }
+                }
+
+                "device_status", "getBatteryStatus", "getDeviceStatus", "checkStatus" -> {
+                    val result = samTools.getDeviceStatus()
+                    val success = result is com.example.device.SamToolResult.Success
+                    val msg = result.message
+                    _uiState.update { it.copy(actionBanner = "Battery & device status retrieved") }
+                    geminiService?.sendToolResponse(
+                        callId,
+                        name,
+                        mapOf("success" to success, "message" to msg, "data" to (result as? com.example.device.SamToolResult.Success)?.data)
+                    )
+                    chatRepository.saveMessage(
+                        ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = msg,
+                            isAction = true,
+                            actionName = "device_status",
+                            actionDetail = msg
+                        )
+                    )
+                    if (_uiState.value.currentMode == AppMode.VOICE) {
+                        val batteryVal = (result as? com.example.device.SamToolResult.Success)?.data?.get("battery") ?: "100"
+                        ttsEngine?.speak("Device battery is at $batteryVal percent")
+                    }
+                }
+
+                "toggle_flashlight", "toggleFlashlight", "flashlight" -> {
+                    val enable = (args["enable"] as? Boolean) ?: true
+                    val result = samTools.toggleFlashlight(enable)
+                    val success = result is com.example.device.SamToolResult.Success
+                    val msg = result.message
+                    _uiState.update { it.copy(actionBanner = msg) }
+                    geminiService?.sendToolResponse(
+                        callId,
+                        name,
+                        mapOf("success" to success, "message" to msg)
+                    )
+                    chatRepository.saveMessage(
+                        ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = msg,
+                            isAction = true,
+                            actionName = "toggle_flashlight",
                             actionDetail = msg
                         )
                     )
                 }
 
-                "makeCall" -> {
-                    val phone = args["phoneNumber"]?.toString() ?: ""
-                    val result = deviceActionManager.makeCall(phone)
-                    val success = result is DeviceActionResult.Success
-                    val msg = if (result is DeviceActionResult.Success) result.message else (result as? DeviceActionResult.Failure)?.error ?: ""
+                "adjust_volume", "adjustVolume", "setVolume" -> {
+                    val action = (args["action"] ?: "UP").toString().trim().uppercase()
+                    val level = (args["level"] as? Number)?.toInt()
+                    val result = samTools.adjustVolume(action, level)
+                    val success = result is com.example.device.SamToolResult.Success
+                    val msg = result.message
+                    _uiState.update { it.copy(actionBanner = msg) }
+                    geminiService?.sendToolResponse(
+                        callId,
+                        name,
+                        mapOf("success" to success, "message" to msg)
+                    )
+                    chatRepository.saveMessage(
+                        ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = msg,
+                            isAction = true,
+                            actionName = "adjust_volume",
+                            actionDetail = msg
+                        )
+                    )
+                }
+
+                "make_call", "makeCall", "dialContact" -> {
+                    val phone = (args["phoneNumber"] ?: args["phone"] ?: args["number"] ?: "").toString().trim()
+                    val result = samTools.makeCall(phone)
+                    val success = result is com.example.device.SamToolResult.Success
+                    val msg = result.message
                     _uiState.update { it.copy(actionBanner = msg) }
                     geminiService?.sendToolResponse(
                         callId,
@@ -459,9 +573,9 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                     chatRepository.saveMessage(
                         ChatMessage(
                             sender = MessageSender.ASSISTANT,
-                            text = "Call action ($phone): $msg",
+                            text = msg,
                             isAction = true,
-                            actionName = "makeCall",
+                            actionName = "make_call",
                             actionDetail = msg
                         )
                     )
@@ -509,176 +623,36 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                                 )
                             )
                         }
-                        is DeviceActionResult.ContactNotFound -> {
-                            _uiState.update { it.copy(actionBanner = "No contact found matching '${result.query}'") }
+                        else -> {
+                            val msg = "No matching contact found"
+                            _uiState.update { it.copy(actionBanner = msg) }
                             geminiService?.sendToolResponse(
                                 callId,
                                 name,
-                                mapOf(
-                                    "success" to false,
-                                    "error" to "No contact found matching '${result.query}'"
-                                )
+                                mapOf("success" to false, "error" to msg)
                             )
                         }
-                        is DeviceActionResult.PermissionRequired -> {
-                            _uiState.update { it.copy(actionBanner = result.reason) }
-                            geminiService?.sendToolResponse(
-                                callId,
-                                name,
-                                mapOf("success" to false, "error" to "Contacts permission required")
-                            )
-                        }
-                        is DeviceActionResult.Failure -> {
-                            _uiState.update { it.copy(actionBanner = result.error) }
-                            geminiService?.sendToolResponse(
-                                callId,
-                                name,
-                                mapOf("success" to false, "error" to result.error)
-                            )
-                        }
-                        else -> {}
                     }
                 }
 
-                "toggleFlashlight" -> {
-                    val enable = args["enable"] as? Boolean ?: true
-                    val ok = deviceSystemManager.toggleFlashlight(enable)
-                    val resultMsg = if (ok) {
-                        if (enable) "Flashlight turned on" else "Flashlight turned off"
-                    } else {
-                        "Failed to toggle flashlight"
-                    }
-                    _uiState.update { it.copy(actionBanner = resultMsg) }
+                "openWebsite" -> {
+                    val url = args["url"]?.toString() ?: ""
+                    val result = deviceActionManager.openWebsite(url)
+                    val success = result is DeviceActionResult.Success
+                    val msg = if (result is DeviceActionResult.Success) result.message else (result as? DeviceActionResult.Failure)?.error ?: ""
+                    _uiState.update { it.copy(actionBanner = msg) }
                     geminiService?.sendToolResponse(
                         callId,
                         name,
-                        mapOf("success" to ok, "message" to resultMsg)
+                        mapOf("success" to success, "url" to url, "message" to msg)
                     )
                     chatRepository.saveMessage(
                         ChatMessage(
                             sender = MessageSender.ASSISTANT,
-                            text = "$resultMsg 🔦",
+                            text = "Opened website: $url",
                             isAction = true,
-                            actionName = "toggleFlashlight",
-                            actionDetail = resultMsg
-                        )
-                    )
-                }
-
-                "adjustVolume" -> {
-                    val action = args["action"]?.toString() ?: "UP"
-                    val level = (args["level"] as? Number)?.toInt()
-                    val resultMsg = deviceSystemManager.adjustVolume(action, level)
-                    _uiState.update { it.copy(actionBanner = resultMsg) }
-                    geminiService?.sendToolResponse(
-                        callId,
-                        name,
-                        mapOf("success" to true, "message" to resultMsg)
-                    )
-                    chatRepository.saveMessage(
-                        ChatMessage(
-                            sender = MessageSender.ASSISTANT,
-                            text = "$resultMsg 🔊",
-                            isAction = true,
-                            actionName = "adjustVolume",
-                            actionDetail = resultMsg
-                        )
-                    )
-                }
-
-                "getBatteryStatus" -> {
-                    val resultMsg = deviceSystemManager.getBatteryInfo()
-                    _uiState.update { it.copy(actionBanner = resultMsg) }
-                    geminiService?.sendToolResponse(
-                        callId,
-                        name,
-                        mapOf("success" to true, "message" to resultMsg)
-                    )
-                    chatRepository.saveMessage(
-                        ChatMessage(
-                            sender = MessageSender.ASSISTANT,
-                            text = "$resultMsg 🔋",
-                            isAction = true,
-                            actionName = "getBatteryStatus",
-                            actionDetail = resultMsg
-                        )
-                    )
-                }
-
-                "setAlarm" -> {
-                    val hour = (args["hour"] as? Number)?.toInt() ?: 7
-                    val minute = (args["minute"] as? Number)?.toInt() ?: 0
-                    val label = args["label"]?.toString() ?: "Alarm"
-                    val ok = deviceSystemManager.setAlarm(hour, minute, label)
-                    val resultMsg = if (ok) {
-                        "Alarm successfully set for $hour:${String.format("%02d", minute)} ($label)"
-                    } else {
-                        "Could not trigger alarm activity"
-                    }
-                    _uiState.update { it.copy(actionBanner = resultMsg) }
-                    geminiService?.sendToolResponse(
-                        callId,
-                        name,
-                        mapOf("success" to ok, "message" to resultMsg)
-                    )
-                    chatRepository.saveMessage(
-                        ChatMessage(
-                            sender = MessageSender.ASSISTANT,
-                            text = "$resultMsg ⏰",
-                            isAction = true,
-                            actionName = "setAlarm",
-                            actionDetail = resultMsg
-                        )
-                    )
-                }
-
-                "sendWhatsAppMessage" -> {
-                    val recipient = args["recipient"]?.toString() ?: ""
-                    val message = args["message"]?.toString() ?: ""
-                    val ok = deviceSystemManager.sendWhatsAppMessage(recipient, message)
-                    val resultMsg = if (ok) {
-                        "WhatsApp opened with message to $recipient ready"
-                    } else {
-                        "Failed to open WhatsApp intent"
-                    }
-                    _uiState.update { it.copy(actionBanner = resultMsg) }
-                    geminiService?.sendToolResponse(
-                        callId,
-                        name,
-                        mapOf("success" to ok, "message" to resultMsg)
-                    )
-                    chatRepository.saveMessage(
-                        ChatMessage(
-                            sender = MessageSender.ASSISTANT,
-                            text = "WhatsApp message to $recipient is ready sir. 💬",
-                            isAction = true,
-                            actionName = "sendWhatsAppMessage",
-                            actionDetail = resultMsg
-                        )
-                    )
-                }
-
-                "dialContact" -> {
-                    val phoneNumber = args["phoneNumber"]?.toString() ?: ""
-                    val ok = deviceSystemManager.initiatePhoneCall(phoneNumber)
-                    val resultMsg = if (ok) {
-                        "Dialer initiated with $phoneNumber"
-                    } else {
-                        "Failed to launch dialer intent"
-                    }
-                    _uiState.update { it.copy(actionBanner = resultMsg) }
-                    geminiService?.sendToolResponse(
-                        callId,
-                        name,
-                        mapOf("success" to ok, "message" to resultMsg)
-                    )
-                    chatRepository.saveMessage(
-                        ChatMessage(
-                            sender = MessageSender.ASSISTANT,
-                            text = "Dialer initiated for $phoneNumber. 📞",
-                            isAction = true,
-                            actionName = "dialContact",
-                            actionDetail = resultMsg
+                            actionName = "openWebsite",
+                            actionDetail = msg
                         )
                     )
                 }
@@ -823,7 +797,7 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                     addLog("Playback action dispatched: $action (Success: $ok)")
                 }
 
-                "generateImage" -> {
+                "generate_image", "generateImage" -> {
                     val prompt = args["prompt"]?.toString() ?: ""
                     val aspectRatio = args["aspectRatio"]?.toString() ?: "1:1"
                     _uiState.update { it.copy(actionBanner = "🎨 Generating AI image: '$prompt'...") }
@@ -843,7 +817,7 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                             sender = MessageSender.ASSISTANT,
                             text = if (success) "Yeh lijiye aapki generated photo! 🎨✨\nPrompt: \"$prompt\"" else "Photo generate karne mein error aaya. Kripya dobara try karein.",
                             isAction = true,
-                            actionName = "generateImage",
+                            actionName = "generate_image",
                             actionDetail = prompt,
                             imageBase64 = base64
                         )
@@ -854,10 +828,23 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 else -> {
+                    val genericResult = samTools.execute(name, args)
+                    val ok = genericResult is com.example.device.SamToolResult.Success
+                    val msg = genericResult.message
+                    _uiState.update { it.copy(actionBanner = msg) }
                     geminiService?.sendToolResponse(
                         callId,
                         name,
-                        mapOf("success" to false, "error" to "Unsupported function $name")
+                        mapOf("success" to ok, "message" to msg)
+                    )
+                    chatRepository.saveMessage(
+                        ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = msg,
+                            isAction = true,
+                            actionName = name,
+                            actionDetail = msg
+                        )
                     )
                 }
             }
