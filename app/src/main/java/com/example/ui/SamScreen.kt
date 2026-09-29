@@ -59,7 +59,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
+import com.google.accompanist.permissions.shouldShowRationale
 import com.example.ui.theme.SamCyan
 import com.example.ui.theme.SamCyanGlow
 import com.example.ui.theme.SamDarkBg
@@ -74,6 +81,7 @@ import com.example.ui.theme.SamTextMuted
 import com.example.ui.theme.SamTextPrimary
 import com.example.ui.theme.SamTextSecondary
 
+@OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun SamScreen(
     viewModel: SamViewModel,
@@ -82,15 +90,11 @@ fun SamScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    val micPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            viewModel.startSession()
-        } else {
-            Toast.makeText(context, "Microphone permission chahiye voice mode ke liye", Toast.LENGTH_SHORT).show()
-        }
-    }
+    // Accompanist Microphone Permission State
+    val micPermissionState = rememberPermissionState(
+        permission = Manifest.permission.RECORD_AUDIO
+    )
+    var showMicPermissionDialog by remember { mutableStateOf(false) }
 
     val contactsPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -115,15 +119,12 @@ fun SamScreen(
     }
 
     fun handleMicClick() {
-        val hasMicPermission = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.RECORD_AUDIO
-        ) == PackageManager.PERMISSION_GRANTED
-
-        if (!hasMicPermission) {
-            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-        } else {
+        if (micPermissionState.status.isGranted) {
             viewModel.toggleSession()
+        } else if (micPermissionState.status.shouldShowRationale) {
+            showMicPermissionDialog = true
+        } else {
+            showMicPermissionDialog = true
         }
     }
 
@@ -164,14 +165,10 @@ fun SamScreen(
                     onModeSelected = { mode ->
                         if (mode == AppMode.VOICE && uiState.currentMode != AppMode.VOICE) {
                             viewModel.setAppMode(AppMode.VOICE)
-                            val hasMicPermission = ContextCompat.checkSelfPermission(
-                                context,
-                                Manifest.permission.RECORD_AUDIO
-                            ) == PackageManager.PERMISSION_GRANTED
-                            if (!hasMicPermission) {
-                                micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                            } else {
+                            if (micPermissionState.status.isGranted) {
                                 viewModel.startSession()
+                            } else {
+                                showMicPermissionDialog = true
                             }
                         } else {
                             viewModel.setAppMode(mode)
@@ -630,6 +627,14 @@ fun SamScreen(
             contacts = contacts,
             onSelect = { contact -> viewModel.selectContactToCall(contact) },
             onDismiss = { viewModel.dismissContactsDialog() }
+        )
+    }
+
+    // Accompanist Microphone Permission Dialog Flow
+    if (showMicPermissionDialog && !micPermissionState.status.isGranted) {
+        MicrophonePermissionDialog(
+            permissionState = micPermissionState,
+            onDismiss = { showMicPermissionDialog = false }
         )
     }
 }
