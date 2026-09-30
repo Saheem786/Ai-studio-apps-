@@ -124,6 +124,9 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
     private var micRecorder: MicrophoneRecorder? = null
     private var voiceInputHandler: VoiceInputHandler? = null
     private var geminiService: GeminiLiveService? = null
+    private var proximitySensorFilter: com.example.system.SensorFilterService? = null
+    private lateinit var actionPipelineManager: com.example.system.ActionPipelineManager
+    private lateinit var emergencySosHandler: com.example.system.EmergencySosHandler
 
     private val notificationReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -255,6 +258,8 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         initAudioSystem()
+        actionPipelineManager = com.example.system.ActionPipelineManager(application.applicationContext, samTools, deviceSystemManager)
+        emergencySosHandler = com.example.system.EmergencySosHandler(application.applicationContext)
         voiceInputHandler?.setLanguage(initialLanguage)
         ttsEngine?.setLanguage(initialLanguage)
         geminiService?.setApiKey(initialKey)
@@ -306,6 +311,21 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
             getApplication<Application>().registerReceiver(batteryReceiver, batteryFilter)
         }
         addLog("Sam Battery alert receiver registered successfully.")
+
+        // Start Proximity/Pocket Sensor Accidental-Tap lock
+        proximitySensorFilter = com.example.system.SensorFilterService(getApplication()) { blocked ->
+            if (blocked) {
+                addLog("Proximity sensor blocked (pocket/face-down). Suppressing active voice features.")
+                if (_uiState.value.state == AssistantState.LISTENING) {
+                    voiceInputHandler?.cancel()
+                    _uiState.update { it.copy(state = AssistantState.IDLE, actionBanner = "Pocket Lock Active") }
+                }
+            } else {
+                addLog("Proximity sensor cleared. Normal listening restored.")
+                _uiState.update { it.copy(actionBanner = null) }
+            }
+        }
+        proximitySensorFilter?.start()
     }
 
     private fun addLog(message: String) {
@@ -2246,7 +2266,36 @@ $tempo beats per minute, fading out...
         val text = rawText.trim()
         if (text.isBlank()) return
 
-        val lowerText = text.lowercase()
+        val correctedText = com.example.system.ConversationalParser.processCorrections(text)
+
+        val lowerText = correctedText.lowercase()
+
+        // Emergency SOS Voice Trigger
+        val isEmergencyTrigger = lowerText.contains("sam emergency") || 
+                                 lowerText.contains("sam bachao") || 
+                                 lowerText.contains("emergency alert") || 
+                                 lowerText.contains("help me sam")
+
+        if (isEmergencyTrigger) {
+            addLog("EMERGENCY SOS VOICE TRIGGER INBOUND!")
+            _uiState.update { it.copy(isSendingChat = true, actionBanner = "ACTIVATING EMERGENCY SOS...") }
+            emergencySosHandler.triggerEmergencySos { sosMessage ->
+                val assistantMsg = ChatMessage(
+                    sender = MessageSender.ASSISTANT,
+                    text = "🚨 **EMERGENCY SOS DISPATCHED**\n\n$sosMessage",
+                    isAction = true,
+                    actionName = "emergency_sos",
+                    actionDetail = sosMessage
+                )
+                viewModelScope.launch {
+                    chatRepository.saveMessage(assistantMsg)
+                    ttsEngine?.speak("Emergency activated! SMS sent and calling now.")
+                }
+                _uiState.update { it.copy(isSendingChat = false, state = AssistantState.IDLE) }
+            }
+            return
+        }
+
         val isScreenQuery = lowerText.contains("screen dekho") || 
                             lowerText.contains("read screen") || 
                             lowerText.contains("kya likha hai") || 
@@ -2286,10 +2335,46 @@ $tempo beats per minute, fading out...
                     }
 
                     _uiState.update { it.copy(attachedImageBase64 = finalBase64, isSendingChat = false) }
-                    sendChatMessage("This is a screenshot of the user's screen. Please analyze and explain: " + text.replace(Regex("(?i)(screen dekho|read screen|kya likha hai|screen samjhao)"), "").trim())
+                    sendChatMessage("This is a screenshot of the user's screen. Please analyze and explain: " + correctedText.replace(Regex("(?i)(screen dekho|read screen|kya likha hai|screen samjhao)"), "").trim())
                 }
             }
             return
+        }
+
+        // Multi-Step Chained action pipeline
+        val conjunctions = listOf("aur", "and", "phir", "uske baad", ",")
+        val containsConjunction = conjunctions.any { lowerText.contains(it) }
+        if (containsConjunction) {
+            val isWifiQuery = lowerText.contains("wifi") || lowerText.contains("wi-fi")
+            val isTorchQuery = lowerText.contains("torch") || lowerText.contains("flashlight") || lowerText.contains("flash") || lowerText.contains("light")
+            val isBluetoothQuery = lowerText.contains("bluetooth")
+            val isVolumeQuery = lowerText.contains("volume") || lowerText.contains("sound") || lowerText.contains("awaj") || lowerText.contains("awaaz")
+            val isAlarmQuery = lowerText.contains("alarm") || lowerText.contains("wake me up")
+
+            val isHardwarePipeline = isWifiQuery || isTorchQuery || isBluetoothQuery || isVolumeQuery || isAlarmQuery
+
+            if (isHardwarePipeline) {
+                _uiState.update { it.copy(isSendingChat = true, actionBanner = "Running multi-step pipeline...") }
+                viewModelScope.launch {
+                    val chainedResult = actionPipelineManager.executeChainedCommands(correctedText)
+                    if (chainedResult != null) {
+                        val consolidatedMsg = ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = "⛓️ **MULTI-STEP WORKFLOW EXECUTED**\n\n$chainedResult",
+                            isAction = true,
+                            actionName = "chained_actions",
+                            actionDetail = chainedResult
+                        )
+                        chatRepository.saveMessage(consolidatedMsg)
+                        _uiState.update { it.copy(isSendingChat = false, state = AssistantState.IDLE, actionBanner = "Workflow Completed") }
+                        ttsEngine?.speak(chainedResult)
+                    } else {
+                        _uiState.update { it.copy(isSendingChat = false) }
+                        // fallback to standard
+                    }
+                }
+                return
+            }
         }
 
         // Single-flight execution lock: reject if currently processing a request
@@ -2300,17 +2385,17 @@ $tempo beats per minute, fading out...
 
         // Debounce protection: Reject duplicate inputs sent within 1.5 seconds
         val now = System.currentTimeMillis()
-        if (now - lastSentTimestamp < 1500L && text.equals(lastSentPrompt, ignoreCase = true)) {
-            addLog("Debounce Guard: Ignored rapid duplicate request ('$text') sent within 1.5s.")
+        if (now - lastSentTimestamp < 1500L && correctedText.equals(lastSentPrompt, ignoreCase = true)) {
+            addLog("Debounce Guard: Ignored rapid duplicate request ('$correctedText') sent within 1.5s.")
             return
         }
         lastSentTimestamp = now
-        lastSentPrompt = text
+        lastSentPrompt = correctedText
 
         val attachedImg = _uiState.value.attachedImageBase64
         val isDeepResearch = _uiState.value.deepResearchEnabled
 
-        val userMsg = ChatMessage(sender = MessageSender.USER, text = text, imageBase64 = attachedImg)
+        val userMsg = ChatMessage(sender = MessageSender.USER, text = correctedText, imageBase64 = attachedImg)
         _uiState.update { current ->
             current.copy(
                 inputText = "",
@@ -2321,7 +2406,7 @@ $tempo beats per minute, fading out...
         viewModelScope.launch {
             chatRepository.saveMessage(userMsg)
         }
-        addLog("Chat message sent: '$text' (Has Image: ${attachedImg != null}, Deep Research: $isDeepResearch)")
+        addLog("Chat message sent: '$correctedText' (Has Image: ${attachedImg != null}, Deep Research: $isDeepResearch)")
 
         // 1. Offline Fallback Engine check
         if (!isNetworkAvailable()) {
@@ -2838,6 +2923,7 @@ $tempo beats per minute, fading out...
         micRecorder?.stop()
         audioPlayer?.release()
         ttsEngine?.release()
+        proximitySensorFilter?.stop()
         geminiService?.disconnect()
     }
 }
