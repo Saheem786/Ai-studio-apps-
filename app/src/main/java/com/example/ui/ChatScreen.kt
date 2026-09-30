@@ -66,6 +66,8 @@ fun ChatScreenView(
     isSending: Boolean,
     quickReplies: List<String>,
     attachedImageBase64: String? = null,
+    engineMode: com.example.gemini.AiEngineMode = com.example.gemini.AiEngineMode.QUICK,
+    onEngineModeChanged: (com.example.gemini.AiEngineMode) -> Unit = {},
     onRemoveAttachedImage: () -> Unit = {},
     onOpenToolsSheet: () -> Unit = {},
     onConfigureQuickReplies: () -> Unit,
@@ -245,6 +247,40 @@ fun ChatScreenView(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Pinned Dual-Engine Mode Toggle Pill
+                    val isQuick = engineMode == com.example.gemini.AiEngineMode.QUICK
+                    Surface(
+                        color = if (isQuick) SamCyan.copy(alpha = 0.16f) else SamPurplePrimary.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(16.dp),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (isQuick) SamCyan.copy(alpha = 0.8f) else SamPurplePrimary.copy(alpha = 0.8f)
+                        ),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable {
+                                val next = if (isQuick) com.example.gemini.AiEngineMode.DEEP_THINK else com.example.gemini.AiEngineMode.QUICK
+                                onEngineModeChanged(next)
+                            }
+                            .testTag("chat_engine_mode_pill")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Text(text = engineMode.icon, fontSize = 11.sp)
+                            Text(
+                                text = engineMode.title,
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    color = if (isQuick) SamCyan else SamPurpleSecondary,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            )
+                        }
+                    }
+
                     quickReplies.forEach { suggestion ->
                         Surface(
                             color = SamSurfaceElevated,

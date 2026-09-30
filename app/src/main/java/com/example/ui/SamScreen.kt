@@ -119,10 +119,6 @@ fun SamScreen(
         }
     }
 
-    val contactsPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { /* result handled dynamically */ }
-
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
@@ -181,6 +177,10 @@ fun SamScreen(
                     onModelSelected = { model ->
                         viewModel.updateSettings(uiState.apiKey, model, uiState.selectedLanguage)
                     },
+                    engineMode = uiState.engineMode,
+                    onEngineModeChanged = { mode ->
+                        viewModel.setEngineMode(mode)
+                    },
                     voiceMatchEnforced = uiState.voiceMatchEnforced,
                     onVoiceMatchEnforcedChanged = { enabled -> viewModel.toggleVoiceMatchEnforced(enabled) },
                     isVoiceCalibrationCompleted = uiState.isVoiceCalibrationCompleted,
@@ -193,6 +193,8 @@ fun SamScreen(
                     onFloatingWidgetEnabledChanged = { enabled -> viewModel.toggleFloatingWidget(enabled) },
                     wakeWordEnabled = uiState.wakeWordEnabled,
                     onWakeWordEnabledChanged = { enabled -> viewModel.toggleWakeWord(enabled) },
+                    wakeWordOption = uiState.wakeWordOption,
+                    onWakeWordOptionChanged = { option -> viewModel.setWakeWordOption(option) },
                     personalIntelligenceEnabled = uiState.personalIntelligenceEnabled,
                     onPersonalIntelligenceToggled = { enabled -> viewModel.togglePersonalIntelligence(enabled) },
                     currentThemeAccent = uiState.themeAccent,
@@ -262,6 +264,52 @@ fun SamScreen(
                     },
                     modifier = Modifier.align(Alignment.CenterHorizontally)
                 )
+
+                // Dual-Engine Mode Toggle (Quick Response vs Deep Thought)
+                AiEngineModeToggle(
+                    engineMode = uiState.engineMode,
+                    onEngineModeSelected = { mode ->
+                        viewModel.setEngineMode(mode)
+                    },
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+
+                // Always-On Wake Word Status Badge (if enabled)
+                if (uiState.wakeWordEnabled) {
+                    Surface(
+                        color = SamMagenta.copy(alpha = 0.15f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, SamMagenta.copy(alpha = 0.4f)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .padding(top = 2.dp, bottom = 2.dp)
+                            .clickable {
+                                coroutineScope.launch { drawerState.open() }
+                                viewModel.toggleSettingsDrawer(true)
+                            }
+                            .testTag("wake_word_status_badge")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "🎙️",
+                                fontSize = 10.sp
+                            )
+                            Text(
+                                text = "Wake Word: '${uiState.wakeWordOption.phrase}' Active",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = SamMagenta
+                                )
+                            )
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(4.dp))
             }
         }
@@ -273,6 +321,8 @@ fun SamScreen(
                 isSending = uiState.isSendingChat,
                 quickReplies = uiState.quickReplies,
                 attachedImageBase64 = uiState.attachedImageBase64,
+                engineMode = uiState.engineMode,
+                onEngineModeChanged = { viewModel.setEngineMode(it) },
                 onRemoveAttachedImage = { viewModel.setAttachedImage(null) },
                 onOpenToolsSheet = {
                     viewModel.toggleToolsSheet(true)
@@ -544,6 +594,8 @@ fun SamScreen(
             currentSelectedModel = uiState.selectedModel,
             selectedLanguage = uiState.selectedLanguage,
             onLanguageSelected = { lang -> viewModel.setLanguage(lang) },
+            engineMode = uiState.engineMode,
+            onEngineModeChanged = { mode -> viewModel.setEngineMode(mode) },
             voiceMatchEnforced = uiState.voiceMatchEnforced,
             onVoiceMatchEnforcedChanged = { enabled -> viewModel.toggleVoiceMatchEnforced(enabled) },
             isVoiceCalibrationCompleted = uiState.isVoiceCalibrationCompleted,
@@ -556,6 +608,8 @@ fun SamScreen(
             onFloatingWidgetEnabledChanged = { enabled -> viewModel.toggleFloatingWidget(enabled) },
             wakeWordEnabled = uiState.wakeWordEnabled,
             onWakeWordEnabledChanged = { enabled -> viewModel.toggleWakeWord(enabled) },
+            wakeWordOption = uiState.wakeWordOption,
+            onWakeWordOptionChanged = { option -> viewModel.setWakeWordOption(option) },
             currentThemeAccent = uiState.themeAccent,
             onThemeAccentChanged = { accent -> viewModel.changeThemeAccent(accent) },
             onOpenFullThemeSettings = {
@@ -667,6 +721,15 @@ fun SamScreen(
                     "Music" -> {
                         viewModel.toggleToolsSheet(false)
                         viewModel.toggleMusicStudioDialog(true)
+                    }
+                    "Set Alarm" -> {
+                        viewModel.executeDeviceTool("set_alarm", mapOf("hour" to 7, "minute" to 0, "label" to "Morning Alarm"))
+                    }
+                    "Send SMS" -> {
+                        viewModel.executeDeviceTool("send_sms", mapOf("message" to "Hello from Sam AI!"))
+                    }
+                    "Toggle Wi-Fi" -> {
+                        viewModel.executeDeviceTool("toggle_wifi", emptyMap<String, Any?>())
                     }
                     else -> {
                         Toast.makeText(context, "$toolName triggered!", Toast.LENGTH_SHORT).show()

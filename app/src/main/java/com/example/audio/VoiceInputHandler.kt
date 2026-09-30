@@ -54,6 +54,8 @@ class VoiceInputHandler(
                 // Safely cancel and restart with updated recognition intent
                 try {
                     speechRecognizer?.cancel()
+                    speechRecognizer?.destroy()
+                    speechRecognizer = null
                 } catch (e: Exception) {
                     Log.w(TAG, "SpeechRecognizer cancel on language change", e)
                 }
@@ -63,21 +65,28 @@ class VoiceInputHandler(
                         startListening()
                     }
                 }, 200L)
+            } else if (!isListening && previous != language) {
+                try {
+                    speechRecognizer?.destroy()
+                    speechRecognizer = null
+                } catch (e: Exception) {
+                    Log.w(TAG, "SpeechRecognizer destroy on language change", e)
+                }
             }
         }
     }
 
     fun getLanguage(): AssistantLanguage = currentLanguage
 
-    private fun buildRecognizerIntent(): Intent {
-        val primaryLang = currentLanguage.speechLocale
+    internal fun buildRecognizerIntent(targetLanguage: AssistantLanguage = currentLanguage): Intent {
+        val primaryLang = targetLanguage.speechLocale
         return Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
 
-            when (currentLanguage) {
+            when (targetLanguage) {
                 AssistantLanguage.HINGLISH -> {
                     // Bi-directional Hindi + English code-switching
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
@@ -132,13 +141,13 @@ class VoiceInputHandler(
                 else -> {
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, primaryLang)
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, primaryLang)
-                    if (currentLanguage.additionalLocales.isNotEmpty()) {
-                        putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", currentLanguage.additionalLocales.toTypedArray())
+                    if (targetLanguage.additionalLocales.isNotEmpty()) {
+                        putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", targetLanguage.additionalLocales.toTypedArray())
                     }
                     putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
                     putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L)
                     putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 500L)
-                    putExtra(RecognizerIntent.EXTRA_PROMPT, "Listening in ${currentLanguage.displayName}...")
+                    putExtra(RecognizerIntent.EXTRA_PROMPT, "Listening in ${targetLanguage.displayName}...")
                 }
             }
         }

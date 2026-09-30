@@ -476,30 +476,56 @@ class GeminiLiveService(
 
     /**
      * Text Chat request returning (replyText, audioBase64?)
+     * Supports Dual-Engine Modes:
+     * - QUICK: Ultra-fast responses with gemini-3.8-flash (temp 0.5, maxTokens 350)
+     * - DEEP_THINK: Deep reasoning with gemini-3.1-pro-preview (temp 0.7, maxTokens 4096, thinkingLevel high)
      * Includes single-flight execution, exponential backoff on HTTP 429,
-     * and automatic fallback to high-quota model with friendly quota messages.
+     * and automatic fallback to modern Gemini 3.x models.
      */
     suspend fun generateChatResponse(
         prompt: String,
         base64Image: String? = null,
         isDeepResearch: Boolean = false,
-        preferredModel: String? = null
+        preferredModel: String? = null,
+        engineMode: AiEngineMode = AiEngineMode.QUICK
     ): Pair<String, String?> = withContext(Dispatchers.IO) {
         if (currentApiKey.isBlank() || currentApiKey == "MY_GEMINI_API_KEY" || currentApiKey.contains("placeholder", ignoreCase = true)) {
             return@withContext Pair("⚠️ Kripya Settings (⚙️) mein jakar apni asli Gemini API Key dalein!", null)
         }
 
-        val (routedModel, isDeepReasoning) = determineOptimalBrain(prompt, preferredModel)
-        onDiagnosticLog("🧠 Multi-Brain Router: Dispatched to $routedModel (Deep Reasoning: $isDeepReasoning)")
+        val targetDefaultModel = if (engineMode == AiEngineMode.DEEP_THINK) {
+            "gemini-3.1-pro-preview"
+        } else {
+            "gemini-3.8-flash"
+        }
+
+        val effectivePreferred = if (preferredModel.isNullOrBlank() || preferredModel.equals("Autonomous Smart Routing", ignoreCase = true) || preferredModel.equals("auto", ignoreCase = true)) {
+            targetDefaultModel
+        } else {
+            preferredModel
+        }
+
+        val (routedModel, isDeepReasoning) = if (engineMode == AiEngineMode.DEEP_THINK) {
+            Pair(effectivePreferred, true)
+        } else {
+            determineOptimalBrain(prompt, effectivePreferred)
+        }
+
+        onDiagnosticLog("🧠 Engine Mode: ${engineMode.title} | Model: $routedModel (Deep Reasoning: $isDeepReasoning, Temp: ${engineMode.temperature}, MaxTokens: ${engineMode.maxOutputTokens})")
 
         val modelsToTry = mutableListOf<String>().apply {
             if (!routedModel.isNullOrBlank()) {
                 add(routedModel)
             }
-            if (!contains("gemini-3.8-flash")) add("gemini-3.8-flash")
-            if (!contains("gemini-3.1-pro-preview")) add("gemini-3.1-pro-preview")
-            if (!contains("gemini-1.5-flash")) add("gemini-1.5-flash")
-            if (!contains("gemini-2.0-flash")) add("gemini-2.0-flash")
+            if (engineMode == AiEngineMode.DEEP_THINK) {
+                if (!contains("gemini-3.1-pro-preview")) add("gemini-3.1-pro-preview")
+                if (!contains("gemini-3.8-flash")) add("gemini-3.8-flash")
+                if (!contains("gemini-3.5-flash")) add("gemini-3.5-flash")
+            } else {
+                if (!contains("gemini-3.8-flash")) add("gemini-3.8-flash")
+                if (!contains("gemini-3.5-flash")) add("gemini-3.5-flash")
+                if (!contains("gemini-3.1-pro-preview")) add("gemini-3.1-pro-preview")
+            }
         }
         var response: Response? = null
         var lastErrorCode = 200
@@ -511,7 +537,7 @@ class GeminiLiveService(
             val modelName = modelsToTry[modelIdx]
             modelIdx++
             val cleanModel = modelName.trim().removePrefix("models/")
-            onDiagnosticLog("Chat: Generating response using $cleanModel...")
+            onDiagnosticLog("Chat: Generating response using $cleanModel in ${engineMode.name} mode...")
 
             // Retry with exponential backoff on 429 (max 2 retries per model)
             var attempts = 0
@@ -558,13 +584,16 @@ class GeminiLiveService(
                                     put("tools", createToolsDeclarationsJson())
                                 }
 
-                                if (isDeepReasoning) {
-                                    put("generationConfig", JSONObject().apply {
+                                // Apply generationConfig matching user requested Quick vs Deep Thought specification
+                                put("generationConfig", JSONObject().apply {
+                                    put("temperature", engineMode.temperature)
+                                    put("maxOutputTokens", engineMode.maxOutputTokens)
+                                    if (engineMode == AiEngineMode.DEEP_THINK || isDeepReasoning) {
                                         put("thinkingConfig", JSONObject().apply {
                                             put("thinkingLevel", "high")
                                         })
-                                    })
-                                }
+                                    }
+                                })
                             }
                         }
 
@@ -704,9 +733,22 @@ class GeminiLiveService(
                                     "$targetApp open kar diya hai! 🚀"
                                 }
                                 "send_whatsapp", "sendWhatsAppMessage" -> "WhatsApp open kar diya hai, message ready hai! 💬"
-                                "set_timer_or_alarm", "setAlarm", "setTimer" -> {
+                                "set_timer_or_alarm", "setTimer" -> {
                                     val lbl = argsMap["label"]?.toString() ?: "Alert"
                                     "Alarm / Timer successfully set for '$lbl'! ⏰"
+                                }
+                                "set_alarm", "setAlarm", "create_alarm" -> {
+                                    val hr = argsMap["hour"]?.toString() ?: "7"
+                                    val min = argsMap["minute"]?.toString() ?: "00"
+                                    val lbl = argsMap["label"]?.toString() ?: "Alarm"
+                                    "Alarm set ho gaya hai for $hr:$min ('$lbl')! ⏰"
+                                }
+                                "send_sms", "sendSms" -> {
+                                    val recipient = argsMap["recipient"]?.toString() ?: "Contact"
+                                    "SMS composer open kar diya hai for $recipient! ✉️"
+                                }
+                                "toggle_wifi", "toggleWifi" -> {
+                                    "Wi-Fi quick panel open kar diya hai! 📶"
                                 }
                                 "device_status", "getDeviceStatus" -> "Checking device hardware status... 📱"
                                 "generate_image", "generateImage" -> "Generating AI image with Imagen 3... 🎨"
@@ -718,7 +760,13 @@ class GeminiLiveService(
                         }
                     }
                     if (p.has("text")) {
-                        responseText += p.getString("text")
+                        val textPart = p.getString("text")
+                        val isThought = p.optBoolean("thought", false)
+                        if (isThought && textPart.isNotBlank()) {
+                            responseText += "\n> 🧠 **Thinking Process:**\n> ${textPart.replace("\n", "\n> ")}\n\n"
+                        } else {
+                            responseText += textPart
+                        }
                     }
                     if (p.has("inlineData")) {
                         val inline = p.getJSONObject("inlineData")

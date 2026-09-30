@@ -22,6 +22,7 @@ import com.example.device.DeviceActionManager
 import com.example.device.DeviceActionResult
 import com.example.gemini.SamPersonality
 import com.example.gemini.GeminiLiveService
+import com.example.gemini.AiEngineMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -94,7 +95,9 @@ data class SamUiState(
     val currentPersona: String = "SAM",
     val showMusicStudioDialog: Boolean = false,
     val wakeWordEnabled: Boolean = false,
+    val wakeWordOption: com.example.audio.WakeWordOption = com.example.audio.WakeWordOption.HEY_ARUSHI,
     val selectedLanguage: AssistantLanguage = AssistantLanguage.HINGLISH,
+    val engineMode: AiEngineMode = AiEngineMode.QUICK,
     val showSettingsDrawer: Boolean = false
 )
 
@@ -193,8 +196,15 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
         val savedLangCode = prefs.getString("selected_speech_language", AssistantLanguage.HINGLISH.code)
         val initialLanguage = AssistantLanguage.fromCode(savedLangCode)
 
-        // Apply selected persona directly to static instructions
+        val savedEngineModeStr = prefs.getString("ai_engine_mode", "QUICK")
+        val initialEngineMode = AiEngineMode.fromName(savedEngineModeStr)
+
+        val savedWakeWordKey = prefs.getString("wake_word_option", com.example.audio.WakeWordOption.HEY_ARUSHI.key)
+        val initialWakeWordOption = com.example.audio.WakeWordOption.fromKey(savedWakeWordKey)
+
+        // Apply selected persona and language directly to static instructions
         com.example.gemini.SamPersonality.updatePersona(savedPersona)
+        com.example.gemini.SamPersonality.updateLanguage(initialLanguage)
 
         _uiState.update { 
             it.copy(
@@ -206,8 +216,10 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                 floatingWidgetEnabled = isFloatingWidgetOn,
                 themeAccent = themeAccent,
                 wakeWordEnabled = isWakeWordOn,
+                wakeWordOption = initialWakeWordOption,
                 currentPersona = savedPersona,
-                selectedLanguage = initialLanguage
+                selectedLanguage = initialLanguage,
+                engineMode = initialEngineMode
             ) 
         }
 
@@ -711,6 +723,104 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
 
+                "set_alarm", "setAlarm", "create_alarm", "createAlarm", "alarm", "addAlarm" -> {
+                    val hour = (args["hour"] as? Number)?.toInt()
+                    val minute = (args["minute"] as? Number)?.toInt()
+                    val amPm = args["amPm"]?.toString()
+                    val timeString = (args["timeString"] ?: args["time"] ?: args["at"])?.toString()
+                    val label = (args["label"] ?: args["message"] ?: args["title"] ?: "Sam AI Alert").toString().trim()
+                    val skipUi = (args["skipUi"] as? Boolean) ?: true
+                    val days = (args["days"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() }
+                    val result = samTools.setAlarm(hour, minute, label, amPm, timeString, skipUi, days)
+                    val success = result is com.example.device.SamToolResult.Success
+                    val msg = result.message
+                    _uiState.update { it.copy(actionBanner = msg) }
+                    geminiService?.sendToolResponse(
+                        callId,
+                        name,
+                        mapOf(
+                            "success" to success,
+                            "message" to msg,
+                            "data" to (result as? com.example.device.SamToolResult.Success)?.data
+                        )
+                    )
+                    chatRepository.saveMessage(
+                        ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = msg,
+                            isAction = true,
+                            actionName = "set_alarm",
+                            actionDetail = msg
+                        )
+                    )
+                    if (_uiState.value.currentMode == AppMode.VOICE) {
+                        ttsEngine?.speak(msg)
+                    }
+                }
+
+                "send_sms", "sendSms", "sms", "textMessage", "sendText", "send_message" -> {
+                    val recipient = (args["recipient"] ?: args["contact"] ?: args["phoneNumber"] ?: args["phone"] ?: args["to"] ?: "").toString().trim()
+                    val message = (args["message"] ?: args["text"] ?: args["body"] ?: "").toString().trim()
+                    val result = samTools.sendSms(recipient, message)
+                    val success = result is com.example.device.SamToolResult.Success
+                    val msg = result.message
+                    _uiState.update { it.copy(actionBanner = msg) }
+                    geminiService?.sendToolResponse(
+                        callId,
+                        name,
+                        mapOf(
+                            "success" to success,
+                            "message" to msg,
+                            "recipient" to recipient
+                        )
+                    )
+                    chatRepository.saveMessage(
+                        ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = msg,
+                            isAction = true,
+                            actionName = "send_sms",
+                            actionDetail = "$recipient: $message"
+                        )
+                    )
+                    if (_uiState.value.currentMode == AppMode.VOICE) {
+                        ttsEngine?.speak(msg)
+                    }
+                }
+
+                "toggle_wifi", "toggleWifi", "wifi", "wifiSettings", "turnOnWifi", "turnOffWifi" -> {
+                    val enable = (args["enable"] as? Boolean) ?: when (name) {
+                        "turnOnWifi" -> true
+                        "turnOffWifi" -> false
+                        else -> null
+                    }
+                    val result = samTools.toggleWifi(enable)
+                    val success = result is com.example.device.SamToolResult.Success
+                    val msg = result.message
+                    _uiState.update { it.copy(actionBanner = msg) }
+                    geminiService?.sendToolResponse(
+                        callId,
+                        name,
+                        mapOf(
+                            "success" to success,
+                            "message" to msg,
+                            "data" to (result as? com.example.device.SamToolResult.Success)?.data
+                        )
+                    )
+                    chatRepository.saveMessage(
+                        ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = msg,
+                            isAction = true,
+                            actionName = "toggle_wifi",
+                            actionDetail = msg
+                        )
+                    )
+                    if (_uiState.value.currentMode == AppMode.VOICE) {
+                        ttsEngine?.speak(msg)
+                    }
+                }
+
                 "callContact" -> {
                     val contactName = args["contactName"]?.toString() ?: ""
                     val result = deviceActionManager.callContact(contactName)
@@ -976,9 +1086,16 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                             actionDetail = msg
                         )
                     )
+                    if (_uiState.value.currentMode == AppMode.VOICE) {
+                        ttsEngine?.speak(msg)
+                    }
                 }
             }
         }
+    }
+
+    fun executeDeviceTool(name: String, args: Map<String, Any?> = emptyMap()) {
+        handleToolCall(name, "manual_${System.currentTimeMillis()}", args)
     }
 
     fun toggleSession() {
@@ -989,7 +1106,7 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun startSession() {
+    fun startSession(detectedKeyword: String? = null) {
         val context = getApplication<Application>().applicationContext
         val hasMicPermission = ContextCompat.checkSelfPermission(
             context,
@@ -1045,16 +1162,32 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
         audioPlayer?.interrupt()
         ttsEngine?.stop()
 
+        val listeningBanner = if (!detectedKeyword.isNullOrBlank()) {
+            "Heard '$detectedKeyword'! Listening..."
+        } else {
+            "Sam is listening..."
+        }
+        val transcriptMsg = if (!detectedKeyword.isNullOrBlank()) {
+            "Heard '$detectedKeyword' 🎙️"
+        } else {
+            _uiState.value.transcript
+        }
+
         _uiState.update {
             it.copy(
                 state = AssistantState.LISTENING,
                 isMicActive = true,
                 errorMessage = null,
-                actionBanner = "Sam is listening...",
+                actionBanner = listeningBanner,
+                transcript = transcriptMsg,
                 amplitude = 0f
             )
         }
-        addLog("Voice session started safely. Listening for speech (Hindi / English / Hinglish)...")
+        if (!detectedKeyword.isNullOrBlank()) {
+            addLog("Wake word '$detectedKeyword' triggered session! Listening...")
+        } else {
+            addLog("Voice session started safely. Listening for speech (Hindi / English / Hinglish)...")
+        }
         viewModelScope.launch(Dispatchers.Main) {
             try {
                 voiceInputHandler?.startListening()
@@ -1319,6 +1452,7 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
         geminiService?.setApiKey(trimmedKey)
         voiceInputHandler?.setLanguage(newLanguage)
         ttsEngine?.setLanguage(newLanguage)
+        com.example.gemini.SamPersonality.updateLanguage(newLanguage)
         _uiState.update { 
             it.copy(
                 apiKey = trimmedKey, 
@@ -1342,7 +1476,24 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
         }
         voiceInputHandler?.setLanguage(language)
         ttsEngine?.setLanguage(language)
+        com.example.gemini.SamPersonality.updateLanguage(language)
         addLog("Speech recognition & voice language dynamically set to: ${language.displayName} (${language.speechLocale}) [${language.accuracyBadge}]")
+    }
+
+    fun setEngineMode(mode: AiEngineMode) {
+        val prefs = getApplication<Application>().getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("ai_engine_mode", mode.name).apply()
+        _uiState.update { 
+            it.copy(
+                engineMode = mode,
+                actionBanner = if (mode == AiEngineMode.QUICK) {
+                    "⚡ Quick Response Mode active (Gemini 3.8 Flash • Ultra-Fast)"
+                } else {
+                    "🧠 Deep Thought Mode active (Gemini 3.1 Pro • Complex Reasoning)"
+                }
+            ) 
+        }
+        addLog("AI Engine Mode switched to: ${mode.title} (${mode.modelName} • Temp ${mode.temperature}, MaxTokens ${mode.maxOutputTokens})")
     }
 
     fun toggleSettingsDrawer(show: Boolean) {
@@ -1645,12 +1796,25 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(diagnosticLogs = emptyList()) }
     }
 
+    fun setWakeWordOption(option: com.example.audio.WakeWordOption) {
+        val context = getApplication<Application>().applicationContext
+        val prefs = context.getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("wake_word_option", option.key).apply()
+        _uiState.update { it.copy(wakeWordOption = option) }
+        addLog("Wake word keyword spotter set to: '${option.displayName}'")
+        if (_uiState.value.wakeWordEnabled) {
+            toggleWakeWord(false)
+            toggleWakeWord(true)
+        }
+    }
+
     fun toggleWakeWord(enabled: Boolean) {
         val context = getApplication<Application>().applicationContext
         val prefs = context.getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
         prefs.edit().putBoolean("wake_word_enabled", enabled).apply()
         _uiState.update { it.copy(wakeWordEnabled = enabled) }
 
+        val activePhrase = _uiState.value.wakeWordOption.phrase
         val serviceIntent = Intent(context, com.example.audio.SamWakeWordService::class.java)
         try {
             if (enabled) {
@@ -1659,10 +1823,10 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     context.startService(serviceIntent)
                 }
-                addLog("Background 'Hey Sam' wake word listener service started.")
+                addLog("Always-on '$activePhrase' wake word listener service started.")
             } else {
                 context.stopService(serviceIntent)
-                addLog("Background 'Hey Sam' wake word listener service stopped.")
+                addLog("Always-on wake word listener service stopped.")
             }
         } catch (e: Exception) {
             Log.e("SamViewModel", "Error toggling wake word service", e)
@@ -1855,7 +2019,7 @@ $tempo beats per minute, fading out...
         if (isAlarmQuery) {
             val parseResult = deviceSystemManager.parseAndSetAlarm(text)
             val finalResult = parseResult ?: run {
-                samTools.setAlarm(7, 0, "Arushi Alarm")
+                samTools.setAlarm(7, 0, "Sam AI Alarm")
                 Pair(true, "Subah 7:00 baje ka alarm set kar diya hai! ⏰")
             }
             val msg = finalResult.second
@@ -2030,6 +2194,37 @@ $tempo beats per minute, fading out...
         val effectiveText = if (cleanCommand.isNotBlank()) cleanCommand else text
         val lower = effectiveText.lowercase()
 
+        // ⚡ Intelligent Function Mapping: Translates Natural Language Intents (e.g. "call Mom", "set alarm") into Actionable Android Intents
+        val context = getApplication<Application>().applicationContext
+        val mappedAction = com.example.device.intent.IntentFunctionMapper.mapNaturalLanguageToIntent(effectiveText, context)
+        if (mappedAction != null) {
+            addLog("Function Mapper: '$effectiveText' -> Actionable Intent '${mappedAction.actionName}' (${mappedAction.type.displayName})")
+            val execResult = mappedAction.execute(context)
+            val replyText = if (execResult.isSuccess) mappedAction.confirmationSpeech else execResult.message
+
+            val actionMsg = ChatMessage(
+                sender = MessageSender.ASSISTANT,
+                text = replyText,
+                isAction = true,
+                actionName = mappedAction.actionName,
+                actionDetail = mappedAction.summary
+            )
+            viewModelScope.launch {
+                chatRepository.saveMessage(actionMsg)
+            }
+            if (_uiState.value.currentMode == AppMode.VOICE) {
+                ttsEngine?.speak(replyText)
+            }
+            _uiState.update { 
+                it.copy(
+                    actionBanner = replyText,
+                    state = if (_uiState.value.currentMode == AppMode.VOICE) AssistantState.SPEAKING else AssistantState.IDLE,
+                    isSendingChat = false
+                ) 
+            }
+            return
+        }
+
         // Direct System Actions Execution for Arushi (Alarms, SMS, Wi-Fi, Torch, Volume, Battery)
         if (handleSystemActionCommand(effectiveText, lower)) {
             return
@@ -2147,10 +2342,17 @@ $tempo beats per minute, fading out...
 
         viewModelScope.launch {
             try {
+                val activeEngineMode = _uiState.value.engineMode
+                val thinkingBanner = if (activeEngineMode == AiEngineMode.DEEP_THINK) {
+                    "🧠 Sam is deeply reasoning (Gemini 3.1 Pro)..."
+                } else {
+                    "⚡ Sam is thinking (Gemini 3.8 Flash)..."
+                }
+
                 _uiState.update {
                     it.copy(
                         state = AssistantState.THINKING,
-                        actionBanner = "Sam is thinking...",
+                        actionBanner = thinkingBanner,
                         errorMessage = null
                     )
                 }
@@ -2189,13 +2391,15 @@ $tempo beats per minute, fading out...
                     geminiService?.sendUserText(text)
                     replyText = ""
                 } else {
-                    val result = withTimeoutOrNull(8500L) {
+                    val timeoutMs = if (activeEngineMode == AiEngineMode.DEEP_THINK || isDeepResearch) 35000L else 12000L
+                    val result = withTimeoutOrNull(timeoutMs) {
                         withContext(Dispatchers.IO) {
                             geminiService?.generateChatResponse(
                                 prompt = text,
                                 base64Image = attachedImg,
                                 isDeepResearch = isDeepResearch,
-                                preferredModel = _uiState.value.selectedModel
+                                preferredModel = _uiState.value.selectedModel,
+                                engineMode = activeEngineMode
                             )
                         }
                     } ?: Pair("Maaf kijiye, server connect nahi ho paya. Ek baar phir bole.", null)

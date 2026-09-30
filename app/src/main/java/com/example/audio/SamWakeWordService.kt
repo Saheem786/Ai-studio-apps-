@@ -30,6 +30,9 @@ class SamWakeWordService : Service() {
         private const val CHANNEL_ID = "SamWakeWordChannel"
         private const val NOTIFICATION_ID = 42
 
+        const val ACTION_WAKE_WORD_TRIGGERED = "com.example.sam.ACTION_WAKE_WORD_TRIGGERED"
+        const val EXTRA_DETECTED_KEYWORD = "extra_detected_keyword"
+
         // Audio parameters matching VoiceMatchManager
         private const val SAMPLE_RATE = 16000
         private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
@@ -39,6 +42,7 @@ class SamWakeWordService : Service() {
     private var isListening = false
     private var audioRecord: AudioRecord? = null
     private var voiceMatchManager: VoiceMatchManager? = null
+    private var keywordSpotter = LightweightKeywordSpotter()
     private var vibrator: Vibrator? = null
 
     override fun onCreate() {
@@ -101,7 +105,10 @@ class SamWakeWordService : Service() {
                 }
 
                 audioRecord?.startRecording()
-                Log.i(TAG, "Continuous wake word service is listening...")
+                val prefs = getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
+                val targetKey = prefs.getString("wake_word_option", WakeWordOption.HEY_ARUSHI.key)
+                val option = WakeWordOption.fromKey(targetKey)
+                Log.i(TAG, "Continuous wake word service is listening for '${option.phrase}'...")
 
                 val buffer = ShortArray(1600) // 100ms frames
                 val audioWindow = ByteArrayOutputStream()
@@ -158,40 +165,59 @@ class SamWakeWordService : Service() {
 
     private fun evaluateSpeechSegment(pcmData: ByteArray) {
         val prefs = getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
-        val enforceVoiceMatch = prefs.getBoolean("voice_match_enforced", false)
+        val targetKey = prefs.getString("wake_word_option", WakeWordOption.HEY_ARUSHI.key)
+        val option = WakeWordOption.fromKey(targetKey)
+        val sensitivity = prefs.getFloat("wake_word_sensitivity", 0.60f)
 
+        // Evaluate acoustic keyword match using LightweightKeywordSpotter
+        val spotterResult = keywordSpotter.evaluatePcm(pcmData, option, sensitivity)
+        Log.d(TAG, "Keyword Spotter result: ${spotterResult.details}, isMatch=${spotterResult.isMatch}, conf=${spotterResult.confidence}")
+
+        if (!spotterResult.isMatch) {
+            return
+        }
+
+        val enforceVoiceMatch = prefs.getBoolean("voice_match_enforced", false)
         if (enforceVoiceMatch) {
             val similarity = voiceMatchManager?.verifySpeaker(pcmData) ?: 0.0f
-            Log.d(TAG, "Wake word similarity score: $similarity")
-            if (similarity >= 0.68f) {
-                triggerWakeUp()
+            Log.d(TAG, "Voice Match verification score: $similarity")
+            if (similarity >= 0.65f) {
+                triggerWakeUp(spotterResult.detectedKeyword)
             } else {
-                Log.d(TAG, "Speaker mismatch. Wake word rejected.")
+                Log.d(TAG, "Speaker mismatch for voice match. Wake word rejected.")
             }
         } else {
-            // Wake Word always accepts any valid voiced audio if Voice Match is not enforced
-            triggerWakeUp()
+            triggerWakeUp(spotterResult.detectedKeyword)
         }
     }
 
-    private fun triggerWakeUp() {
-        Log.i(TAG, "Wake word 'Hey Sam' detected! Waking up Assistant...")
+    private fun triggerWakeUp(detectedKeyword: String) {
+        val keywordLabel = if (detectedKeyword.isNotBlank()) detectedKeyword else "Hey Arushi"
+        Log.i(TAG, "Wake word '$keywordLabel' detected! Waking up Assistant...")
 
         // Trigger Haptic Feedback
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator?.vibrate(VibrationEffect.createOneShot(120, VibrationEffect.DEFAULT_AMPLITUDE))
+                vibrator?.vibrate(VibrationEffect.createOneShot(140, VibrationEffect.DEFAULT_AMPLITUDE))
             } else {
                 @Suppress("DEPRECATION")
-                vibrator?.vibrate(120)
+                vibrator?.vibrate(140)
             }
         } catch (e: Exception) {
             Log.w(TAG, "Haptic feedback vibrator failed", e)
         }
 
+        // Send local broadcast to update running MainActivity instantly
+        val broadcastIntent = Intent(ACTION_WAKE_WORD_TRIGGERED).apply {
+            putExtra(EXTRA_DETECTED_KEYWORD, keywordLabel)
+            setPackage(packageName)
+        }
+        sendBroadcast(broadcastIntent)
+
         // Launch MainActivity with trigger_listening set to true
         val wakeIntent = Intent(this, MainActivity::class.java).apply {
             putExtra("trigger_listening", true)
+            putExtra(EXTRA_DETECTED_KEYWORD, keywordLabel)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
         startActivity(wakeIntent)
@@ -220,6 +246,10 @@ class SamWakeWordService : Service() {
     }
 
     private fun createNotification(): Notification {
+        val prefs = getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
+        val targetKey = prefs.getString("wake_word_option", WakeWordOption.HEY_ARUSHI.key)
+        val option = WakeWordOption.fromKey(targetKey)
+
         val stopIntent = Intent(this, SamWakeWordService::class.java).apply {
             action = "STOP_SERVICE"
         }
@@ -233,8 +263,8 @@ class SamWakeWordService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Sam Wake Word Active")
-            .setContentText("Continuous 'Hey Sam' wake word detection running in background.")
+            .setContentTitle("Wake Word Active: '${option.phrase}'")
+            .setContentText("Continuous '${option.phrase}' keyword spotter running in background.")
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentIntent(openPendingIntent)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop Detection", stopPendingIntent)

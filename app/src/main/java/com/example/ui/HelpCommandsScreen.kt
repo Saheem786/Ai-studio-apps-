@@ -4,9 +4,13 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import com.example.device.intent.ActionableIntent
+import com.example.device.intent.IntentFunctionMapper
+import com.example.device.intent.IntentType
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,6 +53,8 @@ import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -512,7 +518,14 @@ fun HelpCommandsScreen(
                 }
             }
 
-            // 3. Pro Voice Tips Card
+            // 3. Live Intent Function Mapping Tester
+            item {
+                IntentFunctionMappingTesterCard(
+                    onExecuteCommand = onExecuteCommand
+                )
+            }
+
+            // 4. Pro Voice Tips Card
             item {
                 Surface(
                     color = SamSurfaceElevated,
@@ -778,6 +791,248 @@ private fun CommandCard(
                             )
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Live interactive tester for Natural Language to Actionable Android Intent translation.
+ */
+@Composable
+fun IntentFunctionMappingTesterCard(
+    onExecuteCommand: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    var testInput by remember { mutableStateOf("call Mom") }
+    var mappedIntent by remember(testInput) {
+        mutableStateOf(IntentFunctionMapper.mapNaturalLanguageToIntent(testInput, context))
+    }
+
+    val sampleQueries = listOf(
+        "call Mom",
+        "set alarm for 7:30 AM",
+        "send SMS to Rahul hello",
+        "navigate to Airport",
+        "play Believer on YouTube",
+        "turn on flashlight"
+    )
+
+    Surface(
+        color = SamSurfaceElevated,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, SamCyan.copy(alpha = 0.5f)),
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("intent_mapping_tester_card")
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "⚡",
+                    fontSize = 18.sp
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Intent Function Mapping Engine",
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = SamTextPrimary,
+                            fontSize = 14.sp
+                        )
+                    )
+                    Text(
+                        text = "Translates natural language into actionable Android Intents",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            color = SamTextMuted,
+                            fontSize = 11.sp
+                        )
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Quick chip suggestions
+            Text(
+                text = "Tap to test natural query:",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    color = SamCyan,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 10.5.sp
+                )
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(sampleQueries) { query ->
+                    val isSelected = testInput.equals(query, ignoreCase = true)
+                    Surface(
+                        color = if (isSelected) SamCyan.copy(alpha = 0.25f) else SamSurface,
+                        border = BorderStroke(1.dp, if (isSelected) SamCyan else SamSurfaceBorder),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .clickable {
+                                testInput = query
+                                mappedIntent = IntentFunctionMapper.mapNaturalLanguageToIntent(query, context)
+                            }
+                            .testTag("test_intent_chip_${query.replace(" ", "_")}")
+                    ) {
+                        Text(
+                            text = query,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                color = if (isSelected) SamCyan else SamTextSecondary,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 11.sp
+                            ),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Input field
+            OutlinedTextField(
+                value = testInput,
+                onValueChange = {
+                    testInput = it
+                    mappedIntent = IntentFunctionMapper.mapNaturalLanguageToIntent(it, context)
+                },
+                placeholder = { Text("Type intent e.g. 'call Mom' or 'set alarm'...", fontSize = 12.sp, color = SamTextMuted) },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = SamSurface,
+                    unfocusedContainerColor = SamSurface,
+                    focusedBorderColor = SamCyan,
+                    unfocusedBorderColor = SamSurfaceBorder,
+                    focusedTextColor = SamTextPrimary,
+                    unfocusedTextColor = SamTextPrimary
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("intent_tester_input_field")
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Translation Result Display
+            if (mappedIntent != null) {
+                val act = mappedIntent!!
+                Surface(
+                    color = SamDarkBg.copy(alpha = 0.8f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, SamPurplePrimary.copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(text = act.type.icon, fontSize = 16.sp)
+                                Text(
+                                    text = act.type.displayName,
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = SamCyan
+                                    )
+                                )
+                            }
+                            Surface(
+                                color = SamPurplePrimary.copy(alpha = 0.25f),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text(
+                                    text = act.actionName,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = SamPurpleSecondary
+                                    ),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Text(
+                            text = "Target Android Action: ${act.androidIntent?.action ?: "System Hardware Service"}",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 11.sp,
+                                color = SamTextPrimary
+                            )
+                        )
+
+                        if (act.androidIntent?.data != null) {
+                            Text(
+                                text = "URI Data: ${act.androidIntent.data}",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontSize = 10.5.sp,
+                                    color = SamCyanGlow
+                                )
+                            )
+                        }
+
+                        if (act.parameters.isNotEmpty()) {
+                            Text(
+                                text = "Extracted Parameters: ${act.parameters}",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontSize = 10.5.sp,
+                                    color = SamTextMuted
+                                )
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Button(
+                            onClick = {
+                                val result = act.execute(context)
+                                Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = SamCyan),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(38.dp)
+                                .testTag("btn_execute_mapped_intent")
+                        ) {
+                            Text(
+                                text = "🚀 Execute Actionable Intent",
+                                color = SamDarkBg,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+            } else {
+                Surface(
+                    color = SamSurface,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "💡 Type or tap a supported natural language intent above to see its actionable Android Intent translation.",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            color = SamTextMuted,
+                            fontSize = 11.sp
+                        ),
+                        modifier = Modifier.padding(10.dp)
+                    )
                 }
             }
         }

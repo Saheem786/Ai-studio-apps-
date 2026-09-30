@@ -641,6 +641,8 @@ fun SettingsDialog(
     currentSelectedModel: String = "gemini-3.8-flash",
     selectedLanguage: AssistantLanguage = AssistantLanguage.HINGLISH,
     onLanguageSelected: (AssistantLanguage) -> Unit = {},
+    engineMode: com.example.gemini.AiEngineMode = com.example.gemini.AiEngineMode.QUICK,
+    onEngineModeChanged: (com.example.gemini.AiEngineMode) -> Unit = {},
     voiceMatchEnforced: Boolean,
     onVoiceMatchEnforcedChanged: (Boolean) -> Unit,
     isVoiceCalibrationCompleted: Boolean,
@@ -650,6 +652,8 @@ fun SettingsDialog(
     onFloatingWidgetEnabledChanged: (Boolean) -> Unit,
     wakeWordEnabled: Boolean,
     onWakeWordEnabledChanged: (Boolean) -> Unit,
+    wakeWordOption: com.example.audio.WakeWordOption = com.example.audio.WakeWordOption.HEY_ARUSHI,
+    onWakeWordOptionChanged: (com.example.audio.WakeWordOption) -> Unit = {},
     currentThemeAccent: AppThemeAccent,
     onThemeAccentChanged: (AppThemeAccent) -> Unit,
     onOpenFullThemeSettings: () -> Unit,
@@ -741,6 +745,36 @@ fun SettingsDialog(
                 )
 
                 Spacer(modifier = Modifier.height(18.dp))
+
+                // Dual-Engine Operational Mode Section
+                Text(
+                    text = "Dual-Engine Operational Mode",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = SamCyan
+                    )
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Toggle between Quick Response (3.8 Flash) and Deep Thought (3.1 Pro with complex reasoning).",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 11.sp,
+                        color = SamTextMuted
+                    )
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+
+                var currentEngineModeSelection by remember(engineMode) { mutableStateOf(engineMode) }
+                AiEngineModeToggle(
+                    engineMode = currentEngineModeSelection,
+                    onEngineModeSelected = { mode ->
+                        currentEngineModeSelection = mode
+                        onEngineModeChanged(mode)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Gemini Model Selection Section
                 Text(
@@ -897,6 +931,65 @@ fun SettingsDialog(
                     )
                 )
                 Spacer(modifier = Modifier.height(8.dp))
+
+                // Primary 3-Way Quick Language Toggle (Hindi, English, Hinglish)
+                LanguageSelectionToggle(
+                    selectedLanguage = currentLanguageSelection,
+                    onLanguageSelected = { lang ->
+                        currentLanguageSelection = lang
+                        onLanguageSelected(lang)
+                    },
+                    modifier = Modifier.testTag("dialog_language_toggle")
+                )
+
+                if (currentLanguageSelection == AssistantLanguage.ENGLISH_IN || currentLanguageSelection == AssistantLanguage.ENGLISH_US) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        FilterChip(
+                            selected = currentLanguageSelection == AssistantLanguage.ENGLISH_IN,
+                            onClick = {
+                                currentLanguageSelection = AssistantLanguage.ENGLISH_IN
+                                onLanguageSelected(AssistantLanguage.ENGLISH_IN)
+                            },
+                            label = { Text("🇮🇳 Indian Accent (en-IN)", fontSize = 10.5.sp) },
+                            modifier = Modifier.weight(1f).testTag("dialog_sub_toggle_english_in"),
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = SamSurface,
+                                labelColor = SamTextSecondary,
+                                selectedContainerColor = SamCyan.copy(alpha = 0.25f),
+                                selectedLabelColor = SamCyan
+                            )
+                        )
+                        FilterChip(
+                            selected = currentLanguageSelection == AssistantLanguage.ENGLISH_US,
+                            onClick = {
+                                currentLanguageSelection = AssistantLanguage.ENGLISH_US
+                                onLanguageSelected(AssistantLanguage.ENGLISH_US)
+                            },
+                            label = { Text("🇺🇸 US Accent (en-US)", fontSize = 10.5.sp) },
+                            modifier = Modifier.weight(1f).testTag("dialog_sub_toggle_english_us"),
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = SamSurface,
+                                labelColor = SamTextSecondary,
+                                selectedContainerColor = SamCyan.copy(alpha = 0.25f),
+                                selectedLabelColor = SamCyan
+                            )
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "All Languages",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = SamTextSecondary
+                    )
+                )
+                Spacer(modifier = Modifier.height(6.dp))
 
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -1161,14 +1254,14 @@ fun SettingsDialog(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Hands-Free 'Hey Sam'",
+                            text = "Wake Word ('${wakeWordOption.phrase}')",
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 color = SamTextPrimary,
                                 fontWeight = FontWeight.SemiBold
                             )
                         )
                         Text(
-                            text = "Background continuous keyword listener",
+                            text = "Always-on lightweight keyword spotter",
                             style = MaterialTheme.typography.bodySmall.copy(
                                 fontSize = 11.sp,
                                 color = SamTextMuted
@@ -1187,6 +1280,44 @@ fun SettingsDialog(
                         ),
                         modifier = Modifier.testTag("wake_word_toggle")
                     )
+                }
+
+                if (wakeWordEnabled) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        com.example.audio.WakeWordOption.values().forEach { option ->
+                            val isSelected = wakeWordOption == option
+                            Surface(
+                                color = if (isSelected) SamCyan.copy(alpha = 0.22f) else SamSurface,
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.dp,
+                                    if (isSelected) SamCyan else SamSurfaceBorder
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { onWakeWordOptionChanged(option) }
+                                    .testTag("dialog_wake_word_option_${option.key}")
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        text = option.phrase,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) SamCyan else SamTextSecondary,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(20.dp))

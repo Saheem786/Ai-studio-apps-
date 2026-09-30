@@ -1,71 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Essential Permissions: Voice Recognition, Network Connectivity, System Alarms & Foreground Wake Word Detection -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    <uses-permission android:name="android.permission.READ_CONTACTS" />
-    <uses-permission android:name="android.permission.CALL_PHONE" />
-    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-    <uses-permission android:name="android.permission.READ_CALENDAR" />
-    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
-    <uses-permission android:name="android.permission.SEND_SMS" />
-    <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Queries strictly for Speech Recognizer -->
     <queries>
         <intent>
             <action android:name="android.speech.RecognitionService" />
-        </intent>
-        <package android:name="com.google.android.googlequicksearchbox" />
-        <package android:name="com.whatsapp" />
-        <package android:name="com.whatsapp.w4b" />
-        <package android:name="com.google.android.youtube" />
-        <package android:name="com.instagram.android" />
-        <package android:name="com.android.chrome" />
-        <package android:name="com.google.android.apps.maps" />
-        <package android:name="com.spotify.music" />
-        <package android:name="com.google.android.calculator" />
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="https" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="http" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.DIAL" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.SENDTO" />
-            <data android:scheme="smsto" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.SENDTO" />
-            <data android:scheme="sms" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.SEND" />
-        </intent>
-        <intent>
-            <action android:name="android.settings.panel.action.INTERNET_CONNECTIVITY" />
-        </intent>
-        <intent>
-            <action android:name="android.settings.WIFI_SETTINGS" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.TTS_SERVICE" />
-        </intent>
-        <intent>
-            <action android:name="android.media.action.IMAGE_CAPTURE" />
         </intent>
     </queries>
 
@@ -91,25 +41,16 @@
             </intent-filter>
         </activity>
 
-        <service
-            android:name=".ui.JarvisFloatingWidgetService"
-            android:enabled="true"
-            android:exported="false" />
-
+        <!-- Always-On Keyword Spotter Foreground Service -->
         <service
             android:name=".audio.SamWakeWordService"
-            android:foregroundServiceType="microphone"
-            android:enabled="true"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
 
-        <receiver
-            android:name=".system.MorningBriefingReceiver"
-            android:enabled="true"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.USER_PRESENT" />
-            </intent-filter>
-        </receiver>
+        <!-- Floating Assistant Overlay Service -->
+        <service
+            android:name=".ui.JarvisFloatingWidgetService"
+            android:exported="false" />
     </application>
 
 </manifest>

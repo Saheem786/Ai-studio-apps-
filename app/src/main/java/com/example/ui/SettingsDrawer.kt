@@ -2,6 +2,7 @@ package com.example.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -98,6 +99,8 @@ fun SettingsDrawerSheet(
     onSaveApiKey: (String) -> Unit,
     currentSelectedModel: String,
     onModelSelected: (String) -> Unit,
+    engineMode: com.example.gemini.AiEngineMode = com.example.gemini.AiEngineMode.QUICK,
+    onEngineModeChanged: (com.example.gemini.AiEngineMode) -> Unit = {},
     voiceMatchEnforced: Boolean,
     onVoiceMatchEnforcedChanged: (Boolean) -> Unit,
     isVoiceCalibrationCompleted: Boolean,
@@ -106,6 +109,8 @@ fun SettingsDrawerSheet(
     onFloatingWidgetEnabledChanged: (Boolean) -> Unit,
     wakeWordEnabled: Boolean,
     onWakeWordEnabledChanged: (Boolean) -> Unit,
+    wakeWordOption: com.example.audio.WakeWordOption = com.example.audio.WakeWordOption.HEY_ARUSHI,
+    onWakeWordOptionChanged: (com.example.audio.WakeWordOption) -> Unit = {},
     personalIntelligenceEnabled: Boolean,
     onPersonalIntelligenceToggled: (Boolean) -> Unit,
     currentThemeAccent: AppThemeAccent,
@@ -271,6 +276,65 @@ fun SettingsDrawerSheet(
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
+
+                    // Dedicated Quick Language Selection Toggle (Hindi, English, Hinglish)
+                    Text(
+                        text = "Language Selection Toggle",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = SamTextSecondary
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    LanguageSelectionToggle(
+                        selectedLanguage = selectedLanguage,
+                        onLanguageSelected = onLanguageSelected,
+                        modifier = Modifier.testTag("settings_language_toggle")
+                    )
+
+                    if (selectedLanguage == AssistantLanguage.ENGLISH_IN || selectedLanguage == AssistantLanguage.ENGLISH_US) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            FilterChip(
+                                selected = selectedLanguage == AssistantLanguage.ENGLISH_IN,
+                                onClick = { onLanguageSelected(AssistantLanguage.ENGLISH_IN) },
+                                label = { Text("🇮🇳 Indian Accent (en-IN)", fontSize = 10.5.sp) },
+                                modifier = Modifier.weight(1f).testTag("sub_toggle_english_in"),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = SamSurface,
+                                    labelColor = SamTextSecondary,
+                                    selectedContainerColor = SamCyan.copy(alpha = 0.25f),
+                                    selectedLabelColor = SamCyan
+                                )
+                            )
+                            FilterChip(
+                                selected = selectedLanguage == AssistantLanguage.ENGLISH_US,
+                                onClick = { onLanguageSelected(AssistantLanguage.ENGLISH_US) },
+                                label = { Text("🇺🇸 US Accent (en-US)", fontSize = 10.5.sp) },
+                                modifier = Modifier.weight(1f).testTag("sub_toggle_english_us"),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = SamSurface,
+                                    labelColor = SamTextSecondary,
+                                    selectedContainerColor = SamCyan.copy(alpha = 0.25f),
+                                    selectedLabelColor = SamCyan
+                                )
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Text(
+                        text = "Acoustic Profiles & Verification",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = SamTextSecondary
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
 
                     // Primary Language Options (Hinglish, Hindi, English-IN, English-US)
                     val primaryLanguages = listOf(
@@ -502,6 +566,20 @@ fun SettingsDrawerSheet(
 
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
+                        text = "Dual-Engine Operational Mode",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SamTextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    AiEngineModeToggle(
+                        engineMode = engineMode,
+                        onEngineModeSelected = onEngineModeChanged,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
                         text = "Multi-Brain Model Selection",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
@@ -640,7 +718,7 @@ fun SettingsDrawerSheet(
 
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = SamSurfaceBorder)
 
-                    // Wake Word Switch
+                    // Wake Word Switch & Keyword Spotter Selector
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -648,13 +726,13 @@ fun SettingsDrawerSheet(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Wake Word ('Hey Sam')",
+                                text = "Always-On Wake Word ('${wakeWordOption.phrase}')",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = SamTextPrimary
                             )
                             Text(
-                                text = "Hands-free voice trigger activation",
+                                text = "Lightweight on-device keyword spotter",
                                 fontSize = 10.sp,
                                 color = SamTextMuted
                             )
@@ -669,6 +747,44 @@ fun SettingsDrawerSheet(
                             ),
                             modifier = Modifier.testTag("drawer_switch_wake_word")
                         )
+                    }
+
+                    if (wakeWordEnabled) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            com.example.audio.WakeWordOption.values().forEach { option ->
+                                val isSelected = wakeWordOption == option
+                                Surface(
+                                    color = if (isSelected) SamMagenta.copy(alpha = 0.25f) else SamSurface,
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (isSelected) SamMagenta else SamSurfaceBorder
+                                    ),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable { onWakeWordOptionChanged(option) }
+                                        .testTag("wake_word_option_${option.key}")
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text(
+                                            text = option.phrase,
+                                            fontSize = 10.5.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isSelected) SamMagenta else SamTextSecondary,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = SamSurfaceBorder)
@@ -754,6 +870,82 @@ fun SettingsDrawerSheet(
 }
 
 /**
+ * Modern Segmented Language Selection Toggle for rapid switching between
+ * Hinglish, Hindi, and English with fluid visual feedback and testTags.
+ */
+@Composable
+fun LanguageSelectionToggle(
+    selectedLanguage: AssistantLanguage,
+    onLanguageSelected: (AssistantLanguage) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = SamSurface,
+        shape = RoundedCornerShape(12.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, SamSurfaceBorder),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            val options = listOf(
+                Triple("Hinglish", "🇮🇳 Hinglish", AssistantLanguage.HINGLISH),
+                Triple("Hindi", "🇮🇳 हिन्दी", AssistantLanguage.HINDI),
+                Triple(
+                    "English",
+                    if (selectedLanguage == AssistantLanguage.ENGLISH_US) "🇺🇸 English" else "🇮🇳 English",
+                    if (selectedLanguage == AssistantLanguage.ENGLISH_US) AssistantLanguage.ENGLISH_US else AssistantLanguage.ENGLISH_IN
+                )
+            )
+
+            options.forEach { (key, label, targetLang) ->
+                val isSelected = when (key) {
+                    "Hinglish" -> selectedLanguage == AssistantLanguage.HINGLISH
+                    "Hindi" -> selectedLanguage == AssistantLanguage.HINDI
+                    "English" -> selectedLanguage == AssistantLanguage.ENGLISH_IN || selectedLanguage == AssistantLanguage.ENGLISH_US
+                    else -> false
+                }
+
+                val targetBg = if (isSelected) SamCyan else androidx.compose.ui.graphics.Color.Transparent
+                val animatedBg by animateColorAsState(targetValue = targetBg, label = "toggle_bg_$key")
+                val textColor by animateColorAsState(
+                    targetValue = if (isSelected) SamDarkBg else SamTextSecondary,
+                    label = "toggle_text_$key"
+                )
+
+                Surface(
+                    color = animatedBg,
+                    shape = RoundedCornerShape(9.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(9.dp))
+                        .clickable { onLanguageSelected(targetLang) }
+                        .testTag("language_toggle_${key.lowercase()}")
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp)
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                color = textColor,
+                                fontSize = 12.sp
+                            ),
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
  * Individual high-impact card for selecting primary voice recognition languages (Hinglish, Hindi, English).
  */
 @Composable
@@ -811,6 +1003,14 @@ private fun LanguageCard(
                                     color = SamTextMuted
                                 )
                             }
+                        }
+                        if (language.accuracyBadge.isNotBlank()) {
+                            Text(
+                                text = language.accuracyBadge,
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (isSelected) SamCyan else SamMagenta
+                            )
                         }
                     }
                 }

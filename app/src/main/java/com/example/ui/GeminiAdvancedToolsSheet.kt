@@ -156,6 +156,9 @@ fun GeminiAdvancedToolsSheet(
                 Triple("Images", Icons.Default.Image, "Browse or search attached gallery images"),
                 Triple("Videos", Icons.Default.VideoLibrary, "Explore your local or shared media clips"),
                 Triple("Music", Icons.Default.MusicNote, "Listen or sync your customized sound library"),
+                Triple("Set Alarm", Icons.Default.Alarm, "Schedule clock alarms and wake-up alerts"),
+                Triple("Send SMS", Icons.Default.Sms, "Compose or dispatch SMS text messages"),
+                Triple("Toggle Wi-Fi", Icons.Default.Wifi, "Control device Wi-Fi and network connectivity"),
                 Triple("Canvas", Icons.Default.Palette, "Open code/document interactive workspace"),
                 Triple("Deep Research", Icons.Default.Search, "Toggle deep search grounding tools"),
                 Triple("Guided Learning", Icons.Default.School, "Get structured explanations from Sam")

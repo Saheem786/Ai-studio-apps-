@@ -193,17 +193,17 @@ class SamTools(private val context: Context) {
             // 9. send_sms
             funcs.put(JSONObject().apply {
                 put("name", "send_sms")
-                put("description", "Sends an SMS text message to a contact or phone number.")
+                put("description", "Sends an SMS text message or opens the native SMS app composer with pre-filled recipient and message text. Use whenever the user asks to send an SMS, text someone, or message a contact (e.g. 'Rahul ko SMS bhejo', 'send message to 9876543210', 'text mom I will be late').")
                 put("parameters", JSONObject().apply {
                     put("type", "OBJECT")
                     put("properties", JSONObject().apply {
                         put("recipient", JSONObject().apply {
                             put("type", "STRING")
-                            put("description", "Recipient contact name or phone number.")
+                            put("description", "Recipient contact name (e.g. 'Rahul', 'Mom', 'Doctor') or phone number (e.g. '+919876543210', '9876543210').")
                         })
                         put("message", JSONObject().apply {
                             put("type", "STRING")
-                            put("description", "SMS body text to send.")
+                            put("description", "SMS text body content to send.")
                         })
                     })
                     put("required", JSONArray().put("message"))
@@ -213,13 +213,13 @@ class SamTools(private val context: Context) {
             // 10. toggle_wifi
             funcs.put(JSONObject().apply {
                 put("name", "toggle_wifi")
-                put("description", "Toggles device Wi-Fi state or opens the quick Wi-Fi / Internet control panel.")
+                put("description", "Toggles the device Wi-Fi state or opens the system quick Wi-Fi / Internet connectivity control panel. Call when user asks to turn Wi-Fi on or off, toggle Wi-Fi, or check/manage Wi-Fi settings (e.g. 'Wi-Fi on karo', 'turn off wifi', 'toggle wifi').")
                 put("parameters", JSONObject().apply {
                     put("type", "OBJECT")
                     put("properties", JSONObject().apply {
                         put("enable", JSONObject().apply {
                             put("type", "BOOLEAN")
-                            put("description", "True to turn on, false to turn off, or omit to toggle.")
+                            put("description", "True to turn Wi-Fi ON, false to turn Wi-Fi OFF, or omit to toggle / open the connectivity panel.")
                         })
                     })
                 })
@@ -228,21 +228,33 @@ class SamTools(private val context: Context) {
             // 11. set_alarm
             funcs.put(JSONObject().apply {
                 put("name", "set_alarm")
-                put("description", "Sets a system clock alarm for a specified hour and minute.")
+                put("description", "Sets a system clock alarm for a specified time and label on the user's Android phone. Call whenever the user asks to set an alarm, wake them up, or alert at a specific time (e.g. 'subah 7 baje ka alarm lagao', 'set alarm for 6:30 AM', 'wake me up at 8 AM', '7 baje alarm set karo').")
                 put("parameters", JSONObject().apply {
                     put("type", "OBJECT")
                     put("properties", JSONObject().apply {
                         put("hour", JSONObject().apply {
                             put("type", "INTEGER")
-                            put("description", "Hour in 24-hour format (0-23).")
+                            put("description", "Hour in 24-hour format (0-23) or 1-12 if amPm is provided.")
                         })
                         put("minute", JSONObject().apply {
                             put("type", "INTEGER")
                             put("description", "Minute of the hour (0-59). Defaults to 0.")
                         })
+                        put("amPm", JSONObject().apply {
+                            put("type", "STRING")
+                            put("description", "Optional AM or PM designation ('AM' or 'PM') for 12-hour format.")
+                        })
+                        put("timeString", JSONObject().apply {
+                            put("type", "STRING")
+                            put("description", "Optional raw time string like '7:30 AM', '06:00', or '8 PM' to parse automatically.")
+                        })
                         put("label", JSONObject().apply {
                             put("type", "STRING")
-                            put("description", "Alarm description or label.")
+                            put("description", "Label, description, or purpose of the alarm (e.g. 'Morning Workout', 'Wake up', 'Medicines').")
+                        })
+                        put("skipUi", JSONObject().apply {
+                            put("type", "BOOLEAN")
+                            put("description", "True to set alarm directly in the background (default true), or false to display the clock app.")
                         })
                     })
                     put("required", JSONArray().put("hour"))
@@ -307,22 +319,30 @@ class SamTools(private val context: Context) {
                 makeCall(phone)
             }
 
-            "send_sms", "sendSms", "sms", "textMessage", "sendText" -> {
-                val recipient = (args["recipient"] ?: args["contact"] ?: args["phoneNumber"] ?: args["phone"] ?: "").toString().trim()
+            "send_sms", "sendSms", "sms", "textMessage", "sendText", "send_message" -> {
+                val recipient = (args["recipient"] ?: args["contact"] ?: args["phoneNumber"] ?: args["phone"] ?: args["to"] ?: "").toString().trim()
                 val message = (args["message"] ?: args["text"] ?: args["body"] ?: "").toString().trim()
                 sendSms(recipient, message)
             }
 
-            "toggle_wifi", "toggleWifi", "wifi", "wifiSettings" -> {
-                val enable = args["enable"] as? Boolean
+            "toggle_wifi", "toggleWifi", "wifi", "wifiSettings", "turnOnWifi", "turnOffWifi" -> {
+                val enable = (args["enable"] as? Boolean) ?: when (normalizedName) {
+                    "turnOnWifi" -> true
+                    "turnOffWifi" -> false
+                    else -> null
+                }
                 toggleWifi(enable)
             }
 
-            "set_alarm", "create_alarm" -> {
-                val hour = (args["hour"] as? Number)?.toInt() ?: 7
-                val minute = (args["minute"] as? Number)?.toInt() ?: 0
-                val label = (args["label"] ?: args["message"] ?: "Sam AI Alert").toString().trim()
-                setAlarm(hour, minute, label)
+            "set_alarm", "setAlarm", "create_alarm", "createAlarm", "alarm", "addAlarm" -> {
+                val hour = (args["hour"] as? Number)?.toInt()
+                val minute = (args["minute"] as? Number)?.toInt()
+                val amPm = args["amPm"]?.toString()
+                val timeString = (args["timeString"] ?: args["time"] ?: args["at"])?.toString()
+                val label = (args["label"] ?: args["message"] ?: args["title"] ?: "Sam AI Alert").toString().trim()
+                val skipUi = (args["skipUi"] as? Boolean) ?: true
+                val days = (args["days"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() }
+                setAlarm(hour, minute, label, amPm, timeString, skipUi, days)
             }
 
             else -> {
@@ -657,13 +677,13 @@ class SamTools(private val context: Context) {
         val cleanMsg = messageText.trim()
         val digits = cleanRecipient.filter { it.isDigit() || it == '+' }
         var targetPhoneNumber = digits
-        var recipientName = cleanRecipient
+        var recipientDisplayName = cleanRecipient
 
         if (digits.length < 7 && cleanRecipient.isNotBlank() && cleanRecipient.any { it.isLetter() }) {
             val resolvedNum = lookupContactNumber(cleanRecipient)
             if (resolvedNum != null) {
                 targetPhoneNumber = resolvedNum
-                recipientName = "$cleanRecipient ($resolvedNum)"
+                recipientDisplayName = "$cleanRecipient ($resolvedNum)"
             }
         }
 
@@ -681,36 +701,68 @@ class SamTools(private val context: Context) {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)
-            val info = if (targetPhoneNumber.isNotBlank()) " for $recipientName" else ""
-            SamToolResult.Success("SMS composer open kar diya hai$info! ✉️")
+            val info = if (recipientDisplayName.isNotBlank()) " for $recipientDisplayName" else ""
+            val preview = if (cleanMsg.length > 40) cleanMsg.take(37) + "..." else cleanMsg
+            SamToolResult.Success(
+                message = "SMS composer open kar diya hai$info: \"$preview\"! ✉️",
+                data = mapOf(
+                    "recipient" to recipientDisplayName,
+                    "phoneNumber" to targetPhoneNumber,
+                    "message" to cleanMsg
+                )
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to open SMS composer", e)
             try {
                 val fallbackIntent = Intent(Intent.ACTION_VIEW).apply {
                     type = "vnd.android-dir/mms-sms"
-                    if (cleanMsg.isNotBlank()) putExtra("sms_body", cleanMsg)
+                    if (targetPhoneNumber.isNotBlank()) {
+                        putExtra("address", targetPhoneNumber)
+                    }
+                    if (cleanMsg.isNotBlank()) {
+                        putExtra("sms_body", cleanMsg)
+                    }
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 context.startActivity(fallbackIntent)
                 SamToolResult.Success("SMS app open kar diya hai! ✉️")
             } catch (err: Exception) {
-                SamToolResult.Failure("SMS app open karne mein error aaya", err.message ?: "")
+                SamToolResult.Failure("SMS app open karne mein error aaya: ${err.message ?: "Unknown error"}", err.message ?: "")
             }
         }
     }
 
     fun toggleWifi(enable: Boolean?): SamToolResult {
         return try {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            val isCurrentlyConnected = cm?.activeNetwork?.let { net ->
+                cm.getNetworkCapabilities(net)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+            } ?: false
+
+            val desiredAction = when (enable) {
+                true -> "ON"
+                false -> "OFF"
+                null -> if (isCurrentlyConnected) "OFF" else "ON"
+            }
+
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                // Modern Android (API 29+) uses Settings Panel for zero-permission user Wi-Fi control
                 val panelIntent = try {
                     Intent(Settings.Panel.ACTION_INTERNET_CONNECTIVITY).apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
                 } catch (e: Throwable) {
-                    Intent(Settings.ACTION_WIFI_SETTINGS).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    try {
+                        Intent(Settings.Panel.ACTION_WIFI).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                    } catch (e2: Throwable) {
+                        Intent(Settings.ACTION_WIFI_SETTINGS).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
                     }
                 }
+
                 try {
                     context.startActivity(panelIntent)
                 } catch (e: Exception) {
@@ -719,12 +771,21 @@ class SamTools(private val context: Context) {
                     }
                     context.startActivity(fallback)
                 }
+
+                val currentStatusStr = if (isCurrentlyConnected) "currently connected 🟢" else "currently disconnected ⚪"
                 val actionDesc = when (enable) {
                     true -> "Wi-Fi chalu (ON) karne ke liye"
                     false -> "Wi-Fi band (OFF) karne ke liye"
                     null -> "Wi-Fi toggle karne ke liye"
                 }
-                SamToolResult.Success("$actionDesc Wi-Fi quick panel open kar diya hai! 📶")
+
+                SamToolResult.Success(
+                    message = "$actionDesc quick connectivity panel open kar diya hai ($currentStatusStr)! 📶",
+                    data = mapOf(
+                        "isCurrentlyConnected" to isCurrentlyConnected,
+                        "desiredAction" to desiredAction
+                    )
+                )
             } else {
                 @Suppress("DEPRECATION")
                 val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
@@ -732,8 +793,11 @@ class SamTools(private val context: Context) {
                     val newState = enable ?: !wifiManager.isWifiEnabled
                     @Suppress("DEPRECATION")
                     wifiManager.isWifiEnabled = newState
-                    val stateStr = if (newState) "ON" else "OFF"
-                    SamToolResult.Success("Wi-Fi turn $stateStr kar diya hai! 📶")
+                    val stateStr = if (newState) "ON 📶" else "OFF"
+                    SamToolResult.Success(
+                        message = "Wi-Fi turn $stateStr kar diya hai!",
+                        data = mapOf("wifiEnabled" to newState)
+                    )
                 } else {
                     val intent = Intent(Settings.ACTION_WIFI_SETTINGS).apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -751,29 +815,122 @@ class SamTools(private val context: Context) {
                 context.startActivity(intent)
                 SamToolResult.Success("Wi-Fi settings open kar di hain! 📶")
             } catch (err: Exception) {
-                SamToolResult.Failure("Wi-Fi settings open karne mein error aaya", err.message ?: "")
+                SamToolResult.Failure("Wi-Fi settings open karne mein error aaya: ${err.message ?: "Unknown error"}", err.message ?: "")
             }
         }
     }
 
-    fun setAlarm(hour: Int, minute: Int, label: String = "Alarm"): SamToolResult {
+    fun setAlarm(
+        hour: Int? = null,
+        minute: Int? = null,
+        label: String = "Alarm",
+        amPm: String? = null,
+        timeString: String? = null,
+        skipUi: Boolean = true,
+        days: List<Int>? = null
+    ): SamToolResult {
         return try {
-            val safeHour = hour.coerceIn(0, 23)
-            val safeMinute = minute.coerceIn(0, 59)
+            val (parsedHour, parsedMinute) = parseHourAndMinute(hour, minute, amPm, timeString)
+            val safeHour = parsedHour.coerceIn(0, 23)
+            val safeMinute = parsedMinute.coerceIn(0, 59)
+            val effectiveLabel = label.ifBlank { "Sam AI Alarm" }
+
             val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
                 putExtra(AlarmClock.EXTRA_HOUR, safeHour)
                 putExtra(AlarmClock.EXTRA_MINUTES, safeMinute)
-                putExtra(AlarmClock.EXTRA_MESSAGE, label)
-                putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+                putExtra(AlarmClock.EXTRA_MESSAGE, effectiveLabel)
+                putExtra(AlarmClock.EXTRA_SKIP_UI, skipUi)
+                if (!days.isNullOrEmpty()) {
+                    putIntegerArrayListExtra(AlarmClock.EXTRA_DAYS, ArrayList(days))
+                }
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            context.startActivity(intent)
+
+            try {
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                Log.w(TAG, "ACTION_SET_ALARM failed, trying ACTION_SHOW_ALARMS fallback", e)
+                try {
+                    val showIntent = Intent(AlarmClock.ACTION_SHOW_ALARMS).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(showIntent)
+                } catch (fallbackErr: Exception) {
+                    val clockIntent = context.packageManager.getLaunchIntentForPackage("com.google.android.deskclock")
+                        ?: context.packageManager.getLaunchIntentForPackage("com.sec.android.app.clockpackage")
+                    if (clockIntent != null) {
+                        clockIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(clockIntent)
+                    } else {
+                        throw fallbackErr
+                    }
+                }
+            }
+
+            val amPmIndicator = if (safeHour >= 12) "PM" else "AM"
+            val displayHour12 = when (val h = safeHour % 12) { 0 -> 12 else -> h }
             val formattedTime = String.format("%02d:%02d", safeHour, safeMinute)
-            SamToolResult.Success("Alarm set ho gaya hai for $formattedTime ('$label')! ⏰")
+            val formatted12h = String.format("%d:%02d %s", displayHour12, safeMinute, amPmIndicator)
+
+            SamToolResult.Success(
+                message = "Alarm set ho gaya hai for $formatted12h ($formattedTime) ('$effectiveLabel')! ⏰",
+                data = mapOf(
+                    "hour24" to safeHour,
+                    "minute" to safeMinute,
+                    "formattedTime24" to formattedTime,
+                    "formattedTime12" to formatted12h,
+                    "label" to effectiveLabel
+                )
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to set alarm", e)
-            SamToolResult.Failure("Alarm set karne mein error aaya", e.message ?: "")
+            SamToolResult.Failure("Alarm set karne mein error aaya: ${e.message ?: "Unknown error"}", e.message ?: "")
         }
+    }
+
+    private fun parseHourAndMinute(
+        hour: Int?,
+        minute: Int?,
+        amPm: String?,
+        timeString: String?
+    ): Pair<Int, Int> {
+        if (!timeString.isNullOrBlank()) {
+            val clean = timeString.trim().uppercase()
+            val isPm = clean.contains("PM") || clean.contains("SHAM") || clean.contains("RAAT")
+            val isAm = clean.contains("AM") || clean.contains("SUBAH") || clean.contains("DOPAHAR")
+            val digitsOnly = clean.replace(Regex("[^0-9:]"), "").trim()
+            if (digitsOnly.contains(":")) {
+                val parts = digitsOnly.split(":")
+                val h = parts.getOrNull(0)?.toIntOrNull() ?: 7
+                val m = parts.getOrNull(1)?.toIntOrNull() ?: 0
+                val adjustedH = when {
+                    isPm && h < 12 -> h + 12
+                    isAm && h == 12 -> 0
+                    else -> h
+                }
+                return Pair(adjustedH, m)
+            } else if (digitsOnly.isNotEmpty()) {
+                val h = digitsOnly.toIntOrNull() ?: 7
+                val adjustedH = when {
+                    isPm && h < 12 -> h + 12
+                    isAm && h == 12 -> 0
+                    else -> h
+                }
+                return Pair(adjustedH, minute ?: 0)
+            }
+        }
+
+        var h = hour ?: 7
+        val m = minute ?: 0
+        if (!amPm.isNullOrBlank()) {
+            val upperAmPm = amPm.trim().uppercase()
+            if (upperAmPm == "PM" && h < 12) {
+                h += 12
+            } else if (upperAmPm == "AM" && h == 12) {
+                h = 0
+            }
+        }
+        return Pair(h, m)
     }
 
     private fun lookupContactNumber(nameQuery: String): String? {
