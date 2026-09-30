@@ -94,7 +94,8 @@ data class SamUiState(
     val currentPersona: String = "SAM",
     val showMusicStudioDialog: Boolean = false,
     val wakeWordEnabled: Boolean = false,
-    val selectedLanguage: AssistantLanguage = AssistantLanguage.HINGLISH
+    val selectedLanguage: AssistantLanguage = AssistantLanguage.HINGLISH,
+    val showSettingsDrawer: Boolean = false
 )
 
 class SamViewModel(application: Application) : AndroidViewModel(application) {
@@ -1333,10 +1334,20 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
     fun setLanguage(language: AssistantLanguage) {
         val prefs = getApplication<Application>().getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
         prefs.edit().putString("selected_speech_language", language.code).apply()
-        _uiState.update { it.copy(selectedLanguage = language) }
+        _uiState.update { 
+            it.copy(
+                selectedLanguage = language,
+                actionBanner = "🎙️ Speech language set to ${language.displayName} (${language.speechLocale})"
+            ) 
+        }
         voiceInputHandler?.setLanguage(language)
         ttsEngine?.setLanguage(language)
-        addLog("Speech recognition & voice language set to: ${language.displayName} (${language.speechLocale})")
+        addLog("Speech recognition & voice language dynamically set to: ${language.displayName} (${language.speechLocale}) [${language.accuracyBadge}]")
+    }
+
+    fun toggleSettingsDrawer(show: Boolean) {
+        _uiState.update { it.copy(showSettingsDrawer = show) }
+        addLog("Toggled Settings Drawer: $show")
     }
 
     fun toggleDiagnosticsSheet(show: Boolean) {

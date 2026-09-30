@@ -46,16 +46,103 @@ class VoiceInputHandler(
     private var currentLanguage: AssistantLanguage = AssistantLanguage.HINGLISH
 
     fun setLanguage(language: AssistantLanguage) {
-        val previous = currentLanguage
-        currentLanguage = language
-        onDiagnosticLog("Voice input language set to: ${language.displayName} (${language.speechLocale})")
-        if (isListening && previous != language) {
-            // Restart listening with updated language configuration
-            startListening()
+        runOnMain {
+            val previous = currentLanguage
+            currentLanguage = language
+            onDiagnosticLog("VoiceInputHandler: Dynamic language configuration updated to ${language.displayName} (${language.speechLocale}) [${language.accuracyBadge}]")
+            if (isListening && previous != language) {
+                // Safely cancel and restart with updated recognition intent
+                try {
+                    speechRecognizer?.cancel()
+                } catch (e: Exception) {
+                    Log.w(TAG, "SpeechRecognizer cancel on language change", e)
+                }
+                isListening = false
+                mainHandler.postDelayed({
+                    if (!isDestroyed) {
+                        startListening()
+                    }
+                }, 200L)
+            }
         }
     }
 
     fun getLanguage(): AssistantLanguage = currentLanguage
+
+    private fun buildRecognizerIntent(): Intent {
+        val primaryLang = currentLanguage.speechLocale
+        return Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
+
+            when (currentLanguage) {
+                AssistantLanguage.HINGLISH -> {
+                    // Bi-directional Hindi + English code-switching
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "hi-IN")
+                    putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, false)
+                    val additional = arrayOf("en-IN", "hi-IN", "en-US", "hi")
+                    putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", additional)
+                    putExtra("android.speech.extra.LANGUAGE_DETECTION_ALLOWED_LANGUAGES", arrayOf("hi-IN", "en-IN", "en-US"))
+                    putExtra("android.speech.extra.LANGUAGE_SWITCH_ALLOWED_LANGUAGES", arrayOf("hi-IN", "en-IN", "en-US"))
+                    putExtra("android.speech.extra.ENABLE_LANGUAGE_DETECTION", true)
+                    putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1800L)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1400L)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 400L)
+                    putExtra(RecognizerIntent.EXTRA_PROMPT, "Listening in Hinglish (Hindi + English)...")
+                }
+                AssistantLanguage.HINDI -> {
+                    // Pure Devanagari Hindi acoustic & language model
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "hi-IN")
+                    putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, true)
+                    putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf("hi-IN", "hi"))
+                    putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1600L)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 400L)
+                    putExtra(RecognizerIntent.EXTRA_PROMPT, "हिन्दी में बोलें...")
+                }
+                AssistantLanguage.ENGLISH_IN -> {
+                    // Indian English Phonetics & Accent Tuning
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-IN")
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "en-IN")
+                    putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, true)
+                    putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf("en-IN", "en-US", "en-GB"))
+                    putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 400L)
+                    putExtra(RecognizerIntent.EXTRA_PROMPT, "Listening in English (India)...")
+                }
+                AssistantLanguage.ENGLISH_US -> {
+                    // Standard American English
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US")
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "en-US")
+                    putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, true)
+                    putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf("en-US", "en-GB"))
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 400L)
+                    putExtra(RecognizerIntent.EXTRA_PROMPT, "Listening in English (US)...")
+                }
+                else -> {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, primaryLang)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, primaryLang)
+                    if (currentLanguage.additionalLocales.isNotEmpty()) {
+                        putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", currentLanguage.additionalLocales.toTypedArray())
+                    }
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 500L)
+                    putExtra(RecognizerIntent.EXTRA_PROMPT, "Listening in ${currentLanguage.displayName}...")
+                }
+            }
+        }
+    }
 
     private val recognitionListener = object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) {
@@ -222,8 +309,11 @@ class VoiceInputHandler(
                 speechRecognizer?.destroy()
                 speechRecognizer = null
 
+                // For Hindi and Hinglish, standard SpeechRecognizer uses Google Cloud neural ASR which is vastly superior
                 speechRecognizer = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
-                    SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) {
+                    SpeechRecognizer.isOnDeviceRecognitionAvailable(context) &&
+                    currentLanguage != AssistantLanguage.HINGLISH &&
+                    currentLanguage != AssistantLanguage.HINDI) {
                     try {
                         SpeechRecognizer.createOnDeviceSpeechRecognizer(context).apply {
                             setRecognitionListener(recognitionListener)
@@ -239,22 +329,10 @@ class VoiceInputHandler(
                     }
                 }
 
-                val primaryLang = currentLanguage.speechLocale
-                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                    putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, primaryLang)
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, primaryLang)
-                    putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", currentLanguage.additionalLocales.toTypedArray())
-                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
-                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L)
-                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 500L)
-                }
+                val intent = buildRecognizerIntent()
 
                 speechRecognizer?.startListening(intent)
-                onDiagnosticLog("SpeechRecognizer started listening (${currentLanguage.displayName} - $primaryLang)")
+                onDiagnosticLog("SpeechRecognizer started listening (${currentLanguage.displayName} - ${currentLanguage.speechLocale} - ${currentLanguage.accuracyBadge})")
             } catch (e: SecurityException) {
                 Log.e(TAG, "Microphone permission denied for SpeechRecognizer", e)
                 onDiagnosticLog("SecurityException: Microphone permission not granted")

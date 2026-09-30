@@ -36,14 +36,20 @@ import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -96,6 +102,23 @@ fun SamScreen(
     )
     var showMicPermissionDialog by remember { mutableStateOf(false) }
 
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(uiState.showSettingsDrawer) {
+        if (uiState.showSettingsDrawer && drawerState.isClosed) {
+            drawerState.open()
+        } else if (!uiState.showSettingsDrawer && drawerState.isOpen) {
+            drawerState.close()
+        }
+    }
+
+    LaunchedEffect(drawerState.isOpen) {
+        if (!drawerState.isOpen && uiState.showSettingsDrawer) {
+            viewModel.toggleSettingsDrawer(false)
+        }
+    }
+
     val contactsPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { /* result handled dynamically */ }
@@ -143,23 +166,86 @@ fun SamScreen(
             }
         )
     } else {
-        Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = SamDarkBg,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(SamDarkBg)
-                    .statusBarsPadding()
-            ) {
-                SamTopBar(
-                    state = uiState.state,
-                    onOpenHelp = { viewModel.toggleHelpCommandsScreen(true) },
-                    onOpenDiagnostics = { viewModel.toggleDiagnosticsSheet(true) },
-                    onOpenSettings = { viewModel.toggleSettingsDialog(true) }
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            gesturesEnabled = true,
+            drawerContent = {
+                SettingsDrawerSheet(
+                    selectedLanguage = uiState.selectedLanguage,
+                    onLanguageSelected = { lang ->
+                        viewModel.setLanguage(lang)
+                    },
+                    currentApiKey = uiState.apiKey,
+                    onSaveApiKey = { key -> viewModel.updateApiKey(key) },
+                    currentSelectedModel = uiState.selectedModel,
+                    onModelSelected = { model ->
+                        viewModel.updateSettings(uiState.apiKey, model, uiState.selectedLanguage)
+                    },
+                    voiceMatchEnforced = uiState.voiceMatchEnforced,
+                    onVoiceMatchEnforcedChanged = { enabled -> viewModel.toggleVoiceMatchEnforced(enabled) },
+                    isVoiceCalibrationCompleted = uiState.isVoiceCalibrationCompleted,
+                    onOpenVoiceEnrollment = {
+                        coroutineScope.launch { drawerState.close() }
+                        viewModel.toggleSettingsDrawer(false)
+                        viewModel.toggleVoiceEnrollmentDialog(true)
+                    },
+                    floatingWidgetEnabled = uiState.floatingWidgetEnabled,
+                    onFloatingWidgetEnabledChanged = { enabled -> viewModel.toggleFloatingWidget(enabled) },
+                    wakeWordEnabled = uiState.wakeWordEnabled,
+                    onWakeWordEnabledChanged = { enabled -> viewModel.toggleWakeWord(enabled) },
+                    personalIntelligenceEnabled = uiState.personalIntelligenceEnabled,
+                    onPersonalIntelligenceToggled = { enabled -> viewModel.togglePersonalIntelligence(enabled) },
+                    currentThemeAccent = uiState.themeAccent,
+                    onOpenFullThemeSettings = {
+                        coroutineScope.launch { drawerState.close() }
+                        viewModel.toggleSettingsDrawer(false)
+                        viewModel.toggleThemeSettings(true)
+                    },
+                    onOpenHelp = {
+                        coroutineScope.launch { drawerState.close() }
+                        viewModel.toggleSettingsDrawer(false)
+                        viewModel.toggleHelpCommandsScreen(true)
+                    },
+                    onOpenDiagnostics = {
+                        coroutineScope.launch { drawerState.close() }
+                        viewModel.toggleSettingsDrawer(false)
+                        viewModel.toggleDiagnosticsSheet(true)
+                    },
+                    onClearChat = {
+                        viewModel.clearChatHistory()
+                    },
+                    onCloseDrawer = {
+                        coroutineScope.launch { drawerState.close() }
+                        viewModel.toggleSettingsDrawer(false)
+                    }
                 )
+            }
+        ) {
+            Scaffold(
+            modifier = modifier.fillMaxSize(),
+            containerColor = SamDarkBg,
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            topBar = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(SamDarkBg)
+                        .statusBarsPadding()
+                ) {
+                    SamTopBar(
+                        state = uiState.state,
+                        selectedLanguage = uiState.selectedLanguage,
+                        onOpenHelp = { viewModel.toggleHelpCommandsScreen(true) },
+                        onOpenDiagnostics = { viewModel.toggleDiagnosticsSheet(true) },
+                        onOpenSettings = {
+                            coroutineScope.launch { drawerState.open() }
+                            viewModel.toggleSettingsDrawer(true)
+                        },
+                        onOpenLanguageSelection = {
+                            coroutineScope.launch { drawerState.open() }
+                            viewModel.toggleSettingsDrawer(true)
+                        }
+                    )
                 AppModeToggle(
                     currentMode = uiState.currentMode,
                     onModeSelected = { mode ->
@@ -641,6 +727,7 @@ fun SamScreen(
             permissionState = micPermissionState,
             onDismiss = { showMicPermissionDialog = false }
         )
+    }
     }
 }
 }

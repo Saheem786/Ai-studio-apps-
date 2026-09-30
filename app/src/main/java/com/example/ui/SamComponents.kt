@@ -120,9 +120,11 @@ import com.example.ui.theme.SamTextSecondary
 @Composable
 fun SamTopBar(
     state: AssistantState,
+    selectedLanguage: AssistantLanguage = AssistantLanguage.HINGLISH,
     onOpenHelp: () -> Unit,
     onOpenDiagnostics: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenLanguageSelection: () -> Unit = onOpenSettings,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -177,11 +179,34 @@ fun SamTopBar(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Active Language Pill
+            Surface(
+                onClick = onOpenLanguageSelection,
+                shape = RoundedCornerShape(16.dp),
+                color = Color(0xFF231E3D),
+                border = androidx.compose.foundation.BorderStroke(1.dp, SamCyan.copy(alpha = 0.4f)),
+                modifier = Modifier.testTag("topbar_language_pill")
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                ) {
+                    Text(text = selectedLanguage.flag, fontSize = 12.sp)
+                    Text(
+                        text = selectedLanguage.displayName,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SamCyan
+                    )
+                }
+            }
+
             // Help & Commands Button
             IconButton(
                 onClick = onOpenHelp,
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(40.dp)
                     .background(Color(0xFF231E3D), CircleShape)
                     .testTag("help_button")
             ) {
@@ -197,7 +222,7 @@ fun SamTopBar(
             IconButton(
                 onClick = onOpenDiagnostics,
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(40.dp)
                     .background(Color(0xFF231E3D), CircleShape)
                     .testTag("diagnostics_button")
             ) {
@@ -205,7 +230,7 @@ fun SamTopBar(
                     imageVector = Icons.Default.BugReport,
                     contentDescription = "Debug",
                     tint = Color(0xFF00E5FF),
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(20.dp)
                 )
             }
 
@@ -213,7 +238,7 @@ fun SamTopBar(
             IconButton(
                 onClick = onOpenSettings,
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(40.dp)
                     .background(Color(0xFF231E3D), CircleShape)
                     .testTag("settings_button")
             ) {
@@ -221,7 +246,7 @@ fun SamTopBar(
                     imageVector = Icons.Default.Settings,
                     contentDescription = "Settings",
                     tint = Color(0xFFB388FF),
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }
