@@ -820,6 +820,55 @@ class SamTools(private val context: Context) {
         }
     }
 
+    fun toggleBluetooth(enable: Boolean?): SamToolResult {
+        return try {
+            val bluetoothAdapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+            if (bluetoothAdapter == null) {
+                return SamToolResult.Failure("Bluetooth toggle failed", "Bluetooth feature not supported on this device.")
+            }
+            val desiredState = enable ?: !bluetoothAdapter.isEnabled
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                // Since Android 12 (API 31+), direct connect permissions are required. We'll attempt a direct toggle, but fall back to settings panel or general settings.
+                try {
+                    if (desiredState) {
+                        @Suppress("DEPRECATION")
+                        bluetoothAdapter.enable()
+                    } else {
+                        @Suppress("DEPRECATION")
+                        bluetoothAdapter.disable()
+                    }
+                    SamToolResult.Success("Bluetooth ko successfully ${if (desiredState) "ON 🔵" else "OFF ⚪"} kar diya hai!")
+                } catch (se: SecurityException) {
+                    val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                    SamToolResult.Success("Bluetooth settings open kar di hain taaki aap isse toggle kar sakein! 📶")
+                }
+            } else {
+                if (desiredState) {
+                    @Suppress("DEPRECATION")
+                    bluetoothAdapter.enable()
+                } else {
+                    @Suppress("DEPRECATION")
+                    bluetoothAdapter.disable()
+                }
+                SamToolResult.Success("Bluetooth ko successfully ${if (desiredState) "ON 🔵" else "OFF ⚪"} kar diya hai!")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Bluetooth toggle failed", e)
+            try {
+                val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                SamToolResult.Success("Bluetooth settings open kar di hain! 📶")
+            } catch (err: Exception) {
+                SamToolResult.Failure("Bluetooth settings failure: ${err.message}", err.message ?: "")
+            }
+        }
+    }
+
     fun setAlarm(
         hour: Int? = null,
         minute: Int? = null,

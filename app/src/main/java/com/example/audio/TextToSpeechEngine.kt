@@ -49,9 +49,15 @@ class TextToSpeechEngine(
     private var currentLanguage: AssistantLanguage = AssistantLanguage.HINGLISH
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var currentVoiceType: String = "FEMALE"
 
     fun setLanguage(language: AssistantLanguage) {
         currentLanguage = language
+        configureLocaleAndVoice()
+    }
+
+    fun setVoiceType(voiceType: String) {
+        currentVoiceType = voiceType
         configureLocaleAndVoice()
     }
 
@@ -114,12 +120,24 @@ class TextToSpeechEngine(
         }
 
         // 1. Voice Selection:
-        // Query available voices on the device using textToSpeech.voices.
-        // Prefer high-quality/network neural Indian voices (Target names containing: "hi-in-x", "en-in-x", "hi_in", "en_in")
         try {
             val availableVoices = currentTts.voices
             if (!availableVoices.isNullOrEmpty()) {
-                val preferredIndianVoice = availableVoices.firstOrNull { voice ->
+                val matchingVoices = availableVoices.filter { voice ->
+                    val nameLower = voice.name.lowercase()
+                    val matchesGender = when (currentVoiceType) {
+                        "FEMALE" -> nameLower.contains("female") || nameLower.contains("-f-") || nameLower.contains("f-")
+                        "MALE" -> nameLower.contains("male") || nameLower.contains("-m-") || nameLower.contains("m-")
+                        else -> true
+                    }
+                    matchesGender && (voice.locale.language == currentLanguage.ttsLanguage)
+                }
+
+                val selectedVoice = matchingVoices.firstOrNull { voice ->
+                    val nameLower = voice.name.lowercase()
+                    nameLower.contains("hi-in-x") || nameLower.contains("en-in-x") ||
+                    nameLower.contains("hi_in") || nameLower.contains("en_in")
+                } ?: matchingVoices.firstOrNull() ?: availableVoices.firstOrNull { voice ->
                     val nameLower = voice.name.lowercase()
                     (nameLower.contains("hi-in-x") || nameLower.contains("en-in-x") ||
                      nameLower.contains("hi_in") || nameLower.contains("en_in")) &&
@@ -134,19 +152,23 @@ class TextToSpeechEngine(
                     voice.locale.language == currentLanguage.ttsLanguage
                 }
 
-                preferredIndianVoice?.let {
+                selectedVoice?.let {
                     currentTts.voice = it
-                    onDiagnosticLog("Assigned warm natural voice: ${it.name} (${it.locale})")
-                    Log.i(TAG, "Selected natural human voice: ${it.name}")
+                    onDiagnosticLog("Assigned voice style ($currentVoiceType): ${it.name} (${it.locale})")
+                    Log.i(TAG, "Selected natural human voice style: ${it.name}")
                 }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to apply natural voice selection", e)
         }
 
-        // 2. Human Pitch & Speech Rate:
-        // Slightly elevated pitch for warmth, and relaxed conversational pace
-        currentTts.setPitch(1.02f)      // Slightly elevated for warmth and natural human expression
+        // Apply pitch adjustments for Male/Female/Neutral emulation fallback
+        val pitch = when (currentVoiceType) {
+            "FEMALE" -> 1.18f
+            "MALE" -> 0.86f
+            else -> 1.02f
+        }
+        currentTts.setPitch(pitch)      // Tuned dynamically based on personal voice configuration choice
         currentTts.setSpeechRate(0.96f)  // Slightly relaxed conversational pace (avoids robotic fast reading)
     }
 
@@ -200,6 +222,18 @@ class TextToSpeechEngine(
         utteranceId: String = UUID.randomUUID().toString()
     ) {
         speak(rawText, queueMode, utteranceId)
+    }
+
+    /**
+     * Speaks a streaming chunk: first chunk flushes the queue for instant zero-latency speech,
+     * subsequent chunks are seamlessly appended to the playback queue.
+     */
+    fun speakChunk(
+        chunkText: String,
+        isFirstChunk: Boolean
+    ) {
+        val queueMode = if (isFirstChunk) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+        speak(chunkText, queueMode)
     }
 
     /**

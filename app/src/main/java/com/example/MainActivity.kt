@@ -81,6 +81,10 @@ class MainActivity : ComponentActivity() {
         if (intent?.getBooleanExtra("trigger_morning_briefing", false) == true) {
             viewModelInstance?.deliverMorningBriefing()
         }
+        if (intent?.getBooleanExtra("trigger_battery_alert", false) == true) {
+            val pct = intent.getIntExtra("battery_pct", 15)
+            viewModelInstance?.deliverBatteryAlert(pct)
+        }
     }
 }
 

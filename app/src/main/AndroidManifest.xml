@@ -11,6 +11,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- Queries strictly for Speech Recognizer -->
     <queries>
@@ -51,6 +53,39 @@
         <service
             android:name=".ui.JarvisFloatingWidgetService"
             android:exported="false" />
+
+        <!-- Sam Notification Reader Service -->
+        <service
+            android:name=".system.SamNotificationListener"
+            android:label="Sam Notification Reader"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!-- Sam Screen Context Accessibility Service -->
+        <service
+            android:name=".system.SamScreenContextService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:label="Sam Screen Reader &amp; Vision"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <!-- Sam Proactive Broadcast Receiver -->
+        <receiver android:name=".receivers.SamProactiveReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="android.intent.action.BATTERY_LOW" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

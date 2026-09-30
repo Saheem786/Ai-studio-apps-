@@ -21,16 +21,18 @@ enum class AiEngineMode(
     val badgeLabel: String,
     val description: String,
     val temperature: Double,
-    val maxOutputTokens: Int
+    val maxOutputTokens: Int,
+    val topK: Int? = null
 ) {
     QUICK(
         title = "Quick Response",
         modelName = "gemini-3.8-flash",
         icon = "⚡",
         badgeLabel = "3.8 Flash • Fast",
-        description = "Ultra-fast low latency answers (max 350 tokens, temp 0.5)",
-        temperature = 0.5,
-        maxOutputTokens = 350
+        description = "Ultra-fast low latency answers (max 150 tokens, temp 0.4, topK 20)",
+        temperature = 0.4,
+        maxOutputTokens = 150,
+        topK = 20
     ),
     DEEP_THINK(
         title = "Deep Thought",
@@ -39,7 +41,8 @@ enum class AiEngineMode(
         badgeLabel = "3.1 Pro • Thinking",
         description = "Complex step-by-step reasoning & deep analysis (max 4096 tokens, temp 0.7)",
         temperature = 0.7,
-        maxOutputTokens = 4096
+        maxOutputTokens = 4096,
+        topK = null
     );
 
     companion object {

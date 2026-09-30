@@ -136,8 +136,9 @@ class ExampleRobolectricTest {
     fun `verify ai engine mode quick response and deep thought configurations`() {
         val quick = com.example.gemini.AiEngineMode.QUICK
         assertEquals("gemini-3.8-flash", quick.modelName)
-        assertEquals(0.5, quick.temperature, 0.001)
-        assertEquals(350, quick.maxOutputTokens)
+        assertEquals(0.4, quick.temperature, 0.001)
+        assertEquals(150, quick.maxOutputTokens)
+        assertEquals(20, quick.topK)
         assertEquals("⚡", quick.icon)
 
         val deep = com.example.gemini.AiEngineMode.DEEP_THINK
@@ -224,5 +225,21 @@ class ExampleRobolectricTest {
             "Should mandate speech punctuation for natural cadence",
             instruction.contains("Punctuation for Speech: Write text with commas and short pauses so the text-to-speech engine speaks naturally without rushing.")
         )
+    }
+
+    @Test
+    fun `verify Quick Response mode generationConfig and streaming parameters`() {
+        val quickMode = com.example.gemini.AiEngineMode.QUICK
+        assertEquals("gemini-3.8-flash", quickMode.modelName)
+        assertEquals(0.4, quickMode.temperature, 0.001)
+        assertEquals(150, quickMode.maxOutputTokens)
+        assertEquals(20, quickMode.topK)
+
+        // Verify sentence boundary regex extractor
+        val streamBuffer = StringBuilder("Haan yaar, bilkul! Main abhi YouTube kholta hoon. Enjoy karo.")
+        val match = Regex("(?<=[.?!।\\n])\\s+").find(streamBuffer.toString())
+        org.junit.Assert.assertNotNull("Sentence boundary match should not be null", match)
+        val firstSentence = streamBuffer.substring(0, match!!.range.first + 1).trim()
+        assertEquals("Haan yaar, bilkul!", firstSentence)
     }
 }

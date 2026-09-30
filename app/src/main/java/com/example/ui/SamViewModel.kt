@@ -36,6 +36,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.util.Log
 
@@ -98,7 +99,8 @@ data class SamUiState(
     val wakeWordOption: com.example.audio.WakeWordOption = com.example.audio.WakeWordOption.HEY_ARUSHI,
     val selectedLanguage: AssistantLanguage = AssistantLanguage.HINGLISH,
     val engineMode: AiEngineMode = AiEngineMode.QUICK,
-    val showSettingsDrawer: Boolean = false
+    val showSettingsDrawer: Boolean = false,
+    val ttsVoiceStyle: String = "FEMALE"
 )
 
 class SamViewModel(application: Application) : AndroidViewModel(application) {
@@ -122,6 +124,32 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
     private var micRecorder: MicrophoneRecorder? = null
     private var voiceInputHandler: VoiceInputHandler? = null
     private var geminiService: GeminiLiveService? = null
+
+    private val notificationReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val pkg = intent.getStringExtra("package") ?: ""
+            val title = intent.getStringExtra("title") ?: ""
+            val text = intent.getStringExtra("text") ?: ""
+
+            // Listen to messaging apps like WhatsApp or SMS
+            if (pkg.contains("whatsapp") || pkg.contains("telegrams") || pkg.contains("sms") || pkg.contains("messaging") || pkg.contains("mms") || pkg.contains("gmail")) {
+                addLog("Message notification received from $title: $text")
+                if (_uiState.value.currentMode == AppMode.VOICE && _uiState.value.isMicActive) {
+                    val summary = "Hey! $title ne abhi message bheja hai: $text"
+                    ttsEngine?.speak(summary)
+                }
+            }
+        }
+    }
+
+    private val batteryReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == "com.example.SAM_BATTERY_ALERT") {
+                val pct = intent.getIntExtra("battery_pct", 15)
+                deliverBatteryAlert(pct)
+            }
+        }
+    }
 
     private var lastSentTimestamp: Long = 0L
     private var lastSentPrompt: String = ""
@@ -202,6 +230,8 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
         val savedWakeWordKey = prefs.getString("wake_word_option", com.example.audio.WakeWordOption.HEY_ARUSHI.key)
         val initialWakeWordOption = com.example.audio.WakeWordOption.fromKey(savedWakeWordKey)
 
+        val savedVoiceStyle = prefs.getString("tts_voice_style", "FEMALE") ?: "FEMALE"
+
         // Apply selected persona and language directly to static instructions
         com.example.gemini.SamPersonality.updatePersona(savedPersona)
         com.example.gemini.SamPersonality.updateLanguage(initialLanguage)
@@ -219,7 +249,8 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                 wakeWordOption = initialWakeWordOption,
                 currentPersona = savedPersona,
                 selectedLanguage = initialLanguage,
-                engineMode = initialEngineMode
+                engineMode = initialEngineMode,
+                ttsVoiceStyle = savedVoiceStyle
             ) 
         }
 
@@ -257,6 +288,24 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                 deliverMorningBriefing()
             }
         }
+
+        // Register Notification Reader broadcast receiver
+        val filter = IntentFilter("com.example.SAM_NOTIFICATION_RECEIVED")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            getApplication<Application>().registerReceiver(notificationReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            getApplication<Application>().registerReceiver(notificationReceiver, filter)
+        }
+        addLog("Sam Notification Reader BroadcastReceiver registered successfully.")
+
+        // Register Battery Proactive Alert broadcast receiver
+        val batteryFilter = IntentFilter("com.example.SAM_BATTERY_ALERT")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            getApplication<Application>().registerReceiver(batteryReceiver, batteryFilter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            getApplication<Application>().registerReceiver(batteryReceiver, batteryFilter)
+        }
+        addLog("Sam Battery alert receiver registered successfully.")
     }
 
     private fun addLog(message: String) {
@@ -336,8 +385,10 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
             onPlaybackStarted = {
                 _uiState.update { it.copy(state = AssistantState.SPEAKING) }
                 addLog("Speaker playback started - UI state changed to SPEAKING")
+                startBargeInMonitor()
             },
             onPlaybackEnded = {
+                stopBargeInMonitor()
                 if (_uiState.value.currentMode == AppMode.VOICE && _uiState.value.isMicActive) {
                     _uiState.update {
                         it.copy(
@@ -371,9 +422,11 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
             onSpeechStarted = {
                 _uiState.update { it.copy(state = AssistantState.SPEAKING) }
                 addLog("TTS speech started - UI state changed to SPEAKING")
+                startBargeInMonitor()
             },
             onSpeechEnded = {
                 addLog("TTS speech ended")
+                stopBargeInMonitor()
                 if (_uiState.value.currentMode == AppMode.VOICE && _uiState.value.isMicActive) {
                     _uiState.update {
                         it.copy(
@@ -397,6 +450,7 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                 addLog(logMsg)
             }
         )
+        ttsEngine?.setVoiceType(_uiState.value.ttsVoiceStyle)
 
         micRecorder = MicrophoneRecorder(
             onAudioChunk = { base64Data, rawBytes ->
@@ -1904,8 +1958,9 @@ $tempo beats per minute, fading out...
         val batteryStatus = deviceSystemManager.getBatteryInfo()
         val events = calendarReminderManager.getTodayEvents()
         val count = events.filter { it.startsWith("- ") }.size
+        val digitOnly = batteryStatus.filter { it.isDigit() }.ifEmpty { "100" }
         
-        val briefingText = "Good morning Sir! Battery is at ${batteryStatus.filter { it.isDigit() }.ifEmpty { "100" }}%. You have $count calendar events scheduled today. All systems are operational."
+        val briefingText = "Good morning! Battery $digitOnly% hai aur aaj ka schedule ekdum clean hai. Aaj $count reminders scheduled hain. Koi zaroori kaam ho toh bataiye."
         
         addLog("Delivering Daily Routine Morning Briefing: $briefingText")
         
@@ -1918,6 +1973,19 @@ $tempo beats per minute, fading out...
             chatRepository.saveMessage(briefingMsg)
             // Speak it out loud via TTS engine
             ttsEngine?.speak(briefingText)
+        }
+    }
+
+    fun deliverBatteryAlert(pct: Int) {
+        val alertText = "Battery $pct% bachi hai, charger se connect kar lijiye."
+        addLog("Delivering battery health proactive alert: $alertText")
+        val alertMsg = ChatMessage(
+            sender = MessageSender.ASSISTANT,
+            text = "⚠️ **BATTERY ALERT**\n\n$alertText"
+        )
+        viewModelScope.launch {
+            chatRepository.saveMessage(alertMsg)
+            ttsEngine?.speak(alertText)
         }
     }
 
@@ -2133,12 +2201,96 @@ $tempo beats per minute, fading out...
             return true
         }
 
+        // 7. Bluetooth Toggle
+        if (lower.contains("bluetooth") &&
+            (lower.contains("on") || lower.contains("off") || lower.contains("turn") ||
+             lower.contains("chalu") || lower.contains("band") || lower.contains("karo") ||
+             lower.contains("toggle") || lower.contains("enable") || lower.contains("disable"))) {
+            val enable = when {
+                lower.contains("off") || lower.contains("band") || lower.contains("disable") -> false
+                lower.contains("on") || lower.contains("chalu") || lower.contains("enable") -> true
+                else -> null
+            }
+            val result = samTools.toggleBluetooth(enable)
+            val msg = result.message
+            val actionMsg = ChatMessage(
+                sender = MessageSender.ASSISTANT,
+                text = msg,
+                isAction = true,
+                actionName = "toggle_bluetooth",
+                actionDetail = msg
+            )
+            viewModelScope.launch { chatRepository.saveMessage(actionMsg) }
+            if (_uiState.value.currentMode == AppMode.VOICE) {
+                ttsEngine?.speak(msg)
+            }
+            _uiState.update { it.copy(actionBanner = msg, isSendingChat = false) }
+            return true
+        }
+
         return false
+    }
+
+    private fun isNetworkAvailable(): Boolean {
+        return try {
+            val cm = getApplication<Application>().getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+            val activeNetwork = cm.activeNetwork ?: return false
+            val capabilities = cm.getNetworkCapabilities(activeNetwork) ?: return false
+            capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        } catch (e: Exception) {
+            false
+        }
     }
 
     fun sendChatMessage(rawText: String) {
         val text = rawText.trim()
         if (text.isBlank()) return
+
+        val lowerText = text.lowercase()
+        val isScreenQuery = lowerText.contains("screen dekho") || 
+                            lowerText.contains("read screen") || 
+                            lowerText.contains("kya likha hai") || 
+                            lowerText.contains("screen samjhao")
+
+        if (isScreenQuery) {
+            addLog("Screen reading command recognized. Checking Accessibility Service status...")
+            val accessibilityInstance = com.example.system.SamScreenContextService.getInstance()
+            if (accessibilityInstance == null) {
+                val instructMsg = "Yaar, mujhe screen dekhne ke liye Accessibility Service permission chahiye hogi. Settings mein 'Sam Screen Reader & Vision' accessibility option chalu karein."
+                val assistantMsg = ChatMessage(sender = MessageSender.ASSISTANT, text = instructMsg)
+                viewModelScope.launch { chatRepository.saveMessage(assistantMsg) }
+                _uiState.update {
+                    it.copy(
+                        isSendingChat = false,
+                        state = if (_uiState.value.currentMode == AppMode.VOICE) AssistantState.SPEAKING else AssistantState.IDLE,
+                        actionBanner = "Permission Required"
+                    )
+                }
+                if (_uiState.value.currentMode == AppMode.VOICE) {
+                    speakMessage(instructMsg)
+                }
+                return
+            }
+
+            _uiState.update { it.copy(isSendingChat = true, actionBanner = "Screen capture kar raha hoon...") }
+            com.example.system.SamScreenContextService.captureScreenBase64 { base64 ->
+                viewModelScope.launch {
+                    val finalBase64 = base64 ?: ""
+                    if (finalBase64.isBlank()) {
+                        val errMsg = "Maaf kijiye yaar, screen screenshot lene mein koi dikkat aayi."
+                        val assistantMsg = ChatMessage(sender = MessageSender.ASSISTANT, text = errMsg)
+                        chatRepository.saveMessage(assistantMsg)
+                        _uiState.update { it.copy(isSendingChat = false, state = AssistantState.IDLE) }
+                        if (_uiState.value.currentMode == AppMode.VOICE) speakMessage(errMsg)
+                        return@launch
+                    }
+
+                    _uiState.update { it.copy(attachedImageBase64 = finalBase64, isSendingChat = false) }
+                    sendChatMessage("This is a screenshot of the user's screen. Please analyze and explain: " + text.replace(Regex("(?i)(screen dekho|read screen|kya likha hai|screen samjhao)"), "").trim())
+                }
+            }
+            return
+        }
 
         // Single-flight execution lock: reject if currently processing a request
         if (_uiState.value.isSendingChat) {
@@ -2170,6 +2322,38 @@ $tempo beats per minute, fading out...
             chatRepository.saveMessage(userMsg)
         }
         addLog("Chat message sent: '$text' (Has Image: ${attachedImg != null}, Deep Research: $isDeepResearch)")
+
+        // 1. Offline Fallback Engine check
+        if (!isNetworkAvailable()) {
+            addLog("Offline mode detected. Running Offline Fallback Engine...")
+            val cleanCommand = text.replace(Regex("(?i)^(hey\\s+)?(arushi|sam|assistant)(\\s+ai)?[,\\s]*"), "").trim()
+            val effectiveText = if (cleanCommand.isNotBlank()) cleanCommand else text
+            val lower = effectiveText.lowercase()
+
+            if (handleSystemActionCommand(effectiveText, lower)) {
+                return
+            } else {
+                val offlineReply = "Suno yaar, lagta hai internet band hai. Offline mein main tumhare alarms, volume, torch, bluetooth aur wifi control kar sakta hoon. Kaho, inme se kuch karu?"
+                val assistantMsg = ChatMessage(
+                    sender = MessageSender.ASSISTANT,
+                    text = offlineReply
+                )
+                viewModelScope.launch {
+                    chatRepository.saveMessage(assistantMsg)
+                }
+                _uiState.update {
+                    it.copy(
+                        isSendingChat = false,
+                        state = if (_uiState.value.currentMode == AppMode.VOICE) AssistantState.SPEAKING else AssistantState.IDLE,
+                        actionBanner = "Offline Fallback Active"
+                    )
+                }
+                if (_uiState.value.currentMode == AppMode.VOICE) {
+                    speakMessage(offlineReply)
+                }
+                return
+            }
+        }
 
         if (_uiState.value.isImageGenActive) {
             requestImageGeneration(text, attachedImg)
@@ -2360,6 +2544,23 @@ $tempo beats per minute, fading out...
                     geminiService?.sendUserText(text)
                     replyText = ""
                 } else {
+                    var streamedChunksCount = 0
+                    val onChunkAvailable: (String, Boolean) -> Unit = { chunk, isFirst ->
+                        streamedChunksCount++
+                        if (_uiState.value.currentMode == AppMode.VOICE) {
+                            if (isFirst) {
+                                _uiState.update {
+                                    it.copy(
+                                        isSendingChat = false,
+                                        actionBanner = "Sam is Speaking...",
+                                        state = AssistantState.SPEAKING
+                                    )
+                                }
+                            }
+                            ttsEngine?.speakChunk(chunk, isFirstChunk = isFirst)
+                        }
+                    }
+
                     val timeoutMs = if (activeEngineMode == AiEngineMode.DEEP_THINK || isDeepResearch) 35000L else 12000L
                     val result = withTimeoutOrNull(timeoutMs) {
                         withContext(Dispatchers.IO) {
@@ -2368,40 +2569,43 @@ $tempo beats per minute, fading out...
                                 base64Image = attachedImg,
                                 isDeepResearch = isDeepResearch,
                                 preferredModel = _uiState.value.selectedModel,
-                                engineMode = activeEngineMode
+                                engineMode = activeEngineMode,
+                                onChunkAvailable = if (activeEngineMode == AiEngineMode.QUICK && !isDeepResearch && attachedImg == null) onChunkAvailable else null
                             )
                         }
                     } ?: Pair("Maaf kijiye, server connect nahi ho paya. Ek baar phir bole.", null)
                     replyText = result.first
                     responseAudio = result.second
-                }
 
-                if (replyText.isNotBlank()) {
-                    val assistantMsg = ChatMessage(
-                        sender = MessageSender.ASSISTANT,
-                        text = replyText
-                    )
-                    chatRepository.saveMessage(assistantMsg)
-                    _uiState.update {
-                        it.copy(
-                            isSendingChat = false,
-                            errorMessage = null,
-                            actionBanner = "Sam is Speaking...",
-                            state = AssistantState.SPEAKING
+                    if (replyText.isNotBlank()) {
+                        val assistantMsg = ChatMessage(
+                            sender = MessageSender.ASSISTANT,
+                            text = replyText
                         )
-                    }
+                        chatRepository.saveMessage(assistantMsg)
+                        _uiState.update {
+                            it.copy(
+                                isSendingChat = false,
+                                errorMessage = null,
+                                actionBanner = "Sam is Speaking...",
+                                state = if (_uiState.value.currentMode == AppMode.VOICE) AssistantState.SPEAKING else AssistantState.IDLE
+                            )
+                        }
 
-                    if (_uiState.value.currentMode == AppMode.VOICE) {
-                        if (!responseAudio.isNullOrEmpty()) {
-                            audioPlayer?.enqueueChunk(responseAudio)
+                        if (_uiState.value.currentMode == AppMode.VOICE) {
+                            if (!responseAudio.isNullOrEmpty()) {
+                                audioPlayer?.enqueueChunk(responseAudio)
+                            } else if (streamedChunksCount == 0) {
+                                // Full speech playback when not streamed in chunks
+                                speakMessage(replyText)
+                            }
                         } else {
-                            speakMessage(replyText)
+                            _uiState.update { it.copy(state = AssistantState.IDLE) }
                         }
                     } else {
-                        _uiState.update { it.copy(state = AssistantState.IDLE) }
+                        _uiState.update { it.copy(isSendingChat = false) }
                     }
-                } else {
-                    _uiState.update { it.copy(isSendingChat = false) }
+                    return@launch
                 }
             } catch (e: Exception) {
                 Log.e("SamViewModel", "Error in sendChatMessage coroutine", e)
@@ -2529,8 +2733,107 @@ $tempo beats per minute, fading out...
         addLog("Accent theme color changed to: ${accent.displayName}")
     }
 
+    fun changeTtsVoiceStyle(voiceStyle: String) {
+        val prefs = getApplication<Application>().getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("tts_voice_style", voiceStyle).apply()
+        _uiState.update { it.copy(ttsVoiceStyle = voiceStyle) }
+        ttsEngine?.setVoiceType(voiceStyle)
+        addLog("TTS Voice style changed to: $voiceStyle")
+    }
+
+    private var bargeInJob: kotlinx.coroutines.Job? = null
+    private var isBargeInActive = false
+
+    private fun startBargeInMonitor() {
+        if (isBargeInActive) return
+        isBargeInActive = true
+
+        bargeInJob = viewModelScope.launch(Dispatchers.IO) {
+            val sampleRate = 16000
+            val channelConfig = android.media.AudioFormat.CHANNEL_IN_MONO
+            val audioFormat = android.media.AudioFormat.ENCODING_PCM_16BIT
+            val minBufferSize = android.media.AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
+            if (minBufferSize <= 0) return@launch
+
+            var record: android.media.AudioRecord? = null
+            try {
+                if (ContextCompat.checkSelfPermission(getApplication(), Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                    record = android.media.AudioRecord(
+                        android.media.MediaRecorder.AudioSource.MIC,
+                        sampleRate,
+                        channelConfig,
+                        audioFormat,
+                        minBufferSize * 2
+                    )
+
+                    if (record.state == android.media.AudioRecord.STATE_INITIALIZED) {
+                        record.startRecording()
+                        val buffer = ShortArray(800) // 50ms frames
+                        Log.i("BargeInMonitor", "Barge-in RMS monitoring loop active.")
+
+                        while (isBargeInActive && _uiState.value.state == AssistantState.SPEAKING) {
+                            val read = record.read(buffer, 0, buffer.size)
+                            if (read > 0) {
+                                var sum = 0.0
+                                for (i in 0 until read) {
+                                    sum += buffer[i] * buffer[i]
+                                }
+                                val rms = Math.sqrt(sum / read)
+                                val normalizedRms = rms / 32768.0
+
+                                // Amplitude threshold > 0.07 (Conversational volume level)
+                                if (normalizedRms > 0.07) {
+                                    Log.i("BargeInMonitor", "Voice barge-in trigger met: RMS = $normalizedRms! Stopping playback...")
+                                    withContext(Dispatchers.Main) {
+                                        ttsEngine?.stop()
+                                        audioPlayer?.interrupt()
+
+                                        _uiState.update {
+                                            it.copy(
+                                                state = AssistantState.LISTENING,
+                                                isMicActive = true,
+                                                actionBanner = "Haan yaar, bolo! Listening..."
+                                            )
+                                        }
+                                        voiceInputHandler?.startListening()
+                                        stopBargeInMonitor()
+                                    }
+                                    break
+                                }
+                            }
+                            delay(50)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("BargeInMonitor", "Error inside barge-in monitor loop", e)
+            } finally {
+                try {
+                    record?.stop()
+                    record?.release()
+                } catch (e: Exception) {}
+            }
+        }
+    }
+
+    private fun stopBargeInMonitor() {
+        isBargeInActive = false
+        bargeInJob?.cancel()
+        bargeInJob = null
+    }
+
     override fun onCleared() {
         super.onCleared()
+        try {
+            getApplication<Application>().unregisterReceiver(notificationReceiver)
+        } catch (e: Exception) {
+            // ignore
+        }
+        try {
+            getApplication<Application>().unregisterReceiver(batteryReceiver)
+        } catch (e: Exception) {
+            // ignore
+        }
         voiceInputHandler?.destroy()
         micRecorder?.stop()
         audioPlayer?.release()

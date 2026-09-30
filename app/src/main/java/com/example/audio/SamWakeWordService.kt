@@ -45,6 +45,56 @@ class SamWakeWordService : Service() {
     private var keywordSpotter = LightweightKeywordSpotter()
     private var vibrator: Vibrator? = null
 
+    private var wakeLock: android.os.PowerManager.WakeLock? = null
+    private var isScreenOff = false
+
+    private val screenStateReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                Intent.ACTION_SCREEN_OFF -> {
+                    isScreenOff = true
+                    Log.i(TAG, "Screen off. Low-Power Standby Mode triggered.")
+                }
+                Intent.ACTION_SCREEN_ON -> {
+                    isScreenOff = false
+                    Log.i(TAG, "Screen on. Normal Power Mode restored.")
+                }
+            }
+        }
+    }
+
+    private fun isPowerSaveMode(): Boolean {
+        return try {
+            val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            pm.isPowerSaveMode
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun acquireWakeLock() {
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            wakeLock = pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "SamAI::WakeWordWakeLock").apply {
+                acquire(10 * 60 * 1000L) // Limit to 10 minutes maximum to optimize battery standby
+            }
+            Log.d(TAG, "Standby WakeLock acquired.")
+        } catch (e: Exception) {
+            Log.e(TAG, "WakeLock acquisition failed", e)
+        }
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            if (wakeLock?.isHeld == true) {
+                wakeLock?.release()
+                Log.d(TAG, "WakeLock released.")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "WakeLock release failed", e)
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         voiceMatchManager = VoiceMatchManager(this)
@@ -57,6 +107,12 @@ class SamWakeWordService : Service() {
             getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
         }
 
+        val screenFilter = android.content.IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+        }
+        registerReceiver(screenStateReceiver, screenFilter)
+
         createNotificationChannel()
     }
 
@@ -67,6 +123,7 @@ class SamWakeWordService : Service() {
             return START_NOT_STICKY
         }
 
+        acquireWakeLock()
         startForeground(NOTIFICATION_ID, createNotification())
         startWakeWordListener()
         return START_STICKY
@@ -152,7 +209,12 @@ class SamWakeWordService : Service() {
                             }
                         }
                     }
-                    Thread.sleep(50)
+                    val sleepMs = when {
+                        isPowerSaveMode() -> 1500L
+                        isScreenOff -> 150L
+                        else -> 50L
+                    }
+                    Thread.sleep(sleepMs)
                 }
 
             } catch (e: Exception) {
@@ -276,6 +338,14 @@ class SamWakeWordService : Service() {
         Log.i(TAG, "Stopping continuous wake word detection.")
         isListening = false
         stopRecordingQuietly()
+        
+        try {
+            unregisterReceiver(screenStateReceiver)
+        } catch (e: Exception) {
+            // ignore
+        }
+        releaseWakeLock()
+
         super.onDestroy()
     }
 }

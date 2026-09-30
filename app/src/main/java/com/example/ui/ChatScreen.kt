@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -31,6 +32,8 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.material3.*
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -69,6 +72,7 @@ fun ChatScreenView(
     engineMode: com.example.gemini.AiEngineMode = com.example.gemini.AiEngineMode.QUICK,
     onEngineModeChanged: (com.example.gemini.AiEngineMode) -> Unit = {},
     onRemoveAttachedImage: () -> Unit = {},
+    onAttachImage: (String) -> Unit = {},
     onOpenToolsSheet: () -> Unit = {},
     onConfigureQuickReplies: () -> Unit,
     onInputChanged: (String) -> Unit,
@@ -83,6 +87,71 @@ fun ChatScreenView(
     val clipboardManager = LocalClipboardManager.current
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     var previewImageBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var showImageSourceDialog by remember { mutableStateOf(false) }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        if (bitmap != null) {
+            try {
+                val outputStream = java.io.ByteArrayOutputStream()
+                bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, outputStream)
+                val bytes = outputStream.toByteArray()
+                val base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.DEFAULT)
+                onAttachImage(base64)
+            } catch (e: Exception) {
+                Toast.makeText(context, "Failed to capture image", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                val inputStream = context.contentResolver.openInputStream(uri)
+                val bytes = inputStream?.readBytes()
+                if (bytes != null) {
+                    val base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.DEFAULT)
+                    onAttachImage(base64)
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Failed to load image", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    if (showImageSourceDialog) {
+        AlertDialog(
+            onDismissRequest = { showImageSourceDialog = false },
+            title = { Text("Attach Image") },
+            text = { Text("Choose an option to capture or select an image for Sam:") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showImageSourceDialog = false
+                        cameraLauncher.launch(null)
+                    }
+                ) {
+                    Text("Take Photo")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showImageSourceDialog = false
+                        galleryLauncher.launch("image/*")
+                    }
+                ) {
+                    Text("Choose from Gallery")
+                }
+            },
+            containerColor = SamSurfaceElevated,
+            titleContentColor = SamTextPrimary,
+            textContentColor = SamTextSecondary
+        )
+    }
 
     // Fullscreen Image Preview Dialog
     val currentPreview = previewImageBitmap
@@ -427,6 +496,22 @@ fun ChatScreenView(
                                 imageVector = Icons.Default.Add,
                                 contentDescription = "Open Advanced Tools Drawer",
                                 tint = SamPurpleSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        // Camera / Image Attachment Button
+                        IconButton(
+                            onClick = { showImageSourceDialog = true },
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(SamSurfaceElevated)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CameraAlt,
+                                contentDescription = "Attach Camera / Gallery Image",
+                                tint = SamCyan,
                                 modifier = Modifier.size(20.dp)
                             )
                         }

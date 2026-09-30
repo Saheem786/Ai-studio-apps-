@@ -487,7 +487,8 @@ class GeminiLiveService(
         base64Image: String? = null,
         isDeepResearch: Boolean = false,
         preferredModel: String? = null,
-        engineMode: AiEngineMode = AiEngineMode.QUICK
+        engineMode: AiEngineMode = AiEngineMode.QUICK,
+        onChunkAvailable: ((chunk: String, isFirstChunk: Boolean) -> Unit)? = null
     ): Pair<String, String?> = withContext(Dispatchers.IO) {
         if (currentApiKey.isBlank() || currentApiKey == "MY_GEMINI_API_KEY" || currentApiKey.contains("placeholder", ignoreCase = true)) {
             return@withContext Pair("⚠️ Kripya Settings (⚙️) mein jakar apni asli Gemini API Key dalein!", null)
@@ -511,7 +512,7 @@ class GeminiLiveService(
             determineOptimalBrain(prompt, effectivePreferred)
         }
 
-        onDiagnosticLog("🧠 Engine Mode: ${engineMode.title} | Model: $routedModel (Deep Reasoning: $isDeepReasoning, Temp: ${engineMode.temperature}, MaxTokens: ${engineMode.maxOutputTokens})")
+        onDiagnosticLog("🧠 Engine Mode: ${engineMode.title} | Model: $routedModel (Deep Reasoning: $isDeepReasoning, Temp: ${engineMode.temperature}, MaxTokens: ${engineMode.maxOutputTokens}, TopK: ${engineMode.topK})")
 
         val modelsToTry = mutableListOf<String>().apply {
             if (!routedModel.isNullOrBlank()) {
@@ -523,6 +524,7 @@ class GeminiLiveService(
                 if (!contains("gemini-3.5-flash")) add("gemini-3.5-flash")
             } else {
                 if (!contains("gemini-3.8-flash")) add("gemini-3.8-flash")
+                if (!contains("gemini-3.5-flash-lite")) add("gemini-3.5-flash-lite")
                 if (!contains("gemini-3.5-flash")) add("gemini-3.5-flash")
                 if (!contains("gemini-3.1-pro-preview")) add("gemini-3.1-pro-preview")
             }
@@ -547,7 +549,13 @@ class GeminiLiveService(
                 for (useMinimalist in listOf(false, true)) {
                     try {
                         isNetworkError = false
-                        val url = "$REST_BASE_URL/models/$cleanModel:generateContent?key=$currentApiKey"
+                        val useStreaming = (engineMode == AiEngineMode.QUICK && onChunkAvailable != null && !isDeepResearch && base64Image.isNullOrEmpty())
+                        val url = if (useStreaming) {
+                            "$REST_BASE_URL/models/$cleanModel:streamGenerateContent?alt=sse&key=$currentApiKey"
+                        } else {
+                            "$REST_BASE_URL/models/$cleanModel:generateContent?key=$currentApiKey"
+                        }
+
                         val bodyJson = JSONObject().apply {
                             val contentsArray = JSONArray().apply {
                                 put(JSONObject().apply {
@@ -588,6 +596,7 @@ class GeminiLiveService(
                                 put("generationConfig", JSONObject().apply {
                                     put("temperature", engineMode.temperature)
                                     put("maxOutputTokens", engineMode.maxOutputTokens)
+                                    engineMode.topK?.let { put("topK", it) }
                                     if (engineMode == AiEngineMode.DEEP_THINK || isDeepReasoning) {
                                         put("thinkingConfig", JSONObject().apply {
                                             put("thinkingLevel", "high")
@@ -606,6 +615,131 @@ class GeminiLiveService(
                         lastErrorCode = callResp.code
 
                         if (callResp.isSuccessful) {
+                            if (useStreaming) {
+                                val source = callResp.body?.source()
+                                if (source != null) {
+                                    var firstChunkSent = false
+                                    val fullAccumulator = StringBuilder()
+                                    val sentenceBuffer = StringBuilder()
+                                    var streamFunctionCallName: String? = null
+                                    var streamFunctionCallId: String? = null
+                                    var streamFunctionCallArgs: Map<String, Any?>? = null
+
+                                    fun emitSentenceIfBoundaryFound() {
+                                        val str = sentenceBuffer.toString()
+                                        val match = Regex("(?<=[.?!।\\n])\\s+").find(str)
+                                        if (match != null) {
+                                            val sentence = str.substring(0, match.range.first + 1).trim()
+                                            val remainder = str.substring(match.range.last + 1)
+                                            if (sentence.isNotBlank()) {
+                                                val isFirst = !firstChunkSent
+                                                firstChunkSent = true
+                                                onChunkAvailable.invoke(sentence, isFirst)
+                                                sentenceBuffer.clear()
+                                                sentenceBuffer.append(remainder)
+                                            }
+                                        }
+                                    }
+
+                                    val reader = java.io.BufferedReader(java.io.InputStreamReader(source.inputStream()))
+                                    while (true) {
+                                        val line = reader.readLine() ?: break
+                                        if (line.startsWith("data: ")) {
+                                            val data = line.removePrefix("data: ").trim()
+                                            if (data.isNotEmpty() && data != "[DONE]") {
+                                                try {
+                                                    val sseJson = JSONObject(data)
+                                                    val candidates = sseJson.optJSONArray("candidates")
+                                                    val candidate = candidates?.optJSONObject(0)
+                                                    val parts = candidate?.optJSONObject("content")?.optJSONArray("parts")
+                                                    if (parts != null) {
+                                                        for (pIdx in 0 until parts.length()) {
+                                                            val part = parts.getJSONObject(pIdx)
+                                                            if (part.has("text")) {
+                                                                val text = part.getString("text")
+                                                                fullAccumulator.append(text)
+                                                                sentenceBuffer.append(text)
+                                                                emitSentenceIfBoundaryFound()
+                                                            } else if (part.has("functionCall")) {
+                                                                val fc = part.getJSONObject("functionCall")
+                                                                streamFunctionCallName = fc.getString("name")
+                                                                streamFunctionCallId = fc.optString("id", java.util.UUID.randomUUID().toString())
+                                                                val argsObj = fc.optJSONObject("args")
+                                                                val argsMap = mutableMapOf<String, Any?>()
+                                                                if (argsObj != null) {
+                                                                    val keys = argsObj.keys()
+                                                                    while (keys.hasNext()) {
+                                                                        val k = keys.next()
+                                                                        argsMap[k] = argsObj.get(k)
+                                                                    }
+                                                                }
+                                                                streamFunctionCallArgs = argsMap
+                                                            }
+                                                        }
+                                                    }
+                                                } catch (e: Exception) {
+                                                    // skip malformed line
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    val remaining = sentenceBuffer.toString().trim()
+                                    if (remaining.isNotBlank()) {
+                                        val isFirst = !firstChunkSent
+                                        firstChunkSent = true
+                                        onChunkAvailable.invoke(remaining, isFirst)
+                                        sentenceBuffer.clear()
+                                    }
+
+                                    if (streamFunctionCallName != null) {
+                                        val fcName = streamFunctionCallName
+                                        val fcId = streamFunctionCallId ?: java.util.UUID.randomUUID().toString()
+                                        val fcArgs = streamFunctionCallArgs ?: emptyMap()
+                                        onDiagnosticLog("Stream Chat: Function call detected: $fcName with args: $fcArgs")
+                                        withContext(Dispatchers.Main) {
+                                            onToolCallReceived(fcName, fcId, fcArgs)
+                                        }
+                                        val defaultActionResponse = when (fcName) {
+                                            "open_app", "openApp" -> {
+                                                val targetApp = fcArgs["appName"]?.toString() ?: "App"
+                                                "$targetApp open kar diya hai! 🚀"
+                                            }
+                                            "send_whatsapp", "sendWhatsAppMessage" -> "WhatsApp open kar diya hai, message ready hai! 💬"
+                                            "set_timer_or_alarm", "setTimer" -> {
+                                                val lbl = fcArgs["label"]?.toString() ?: "Alert"
+                                                "Alarm / Timer successfully set for '$lbl'! ⏰"
+                                            }
+                                            "set_alarm", "setAlarm", "create_alarm" -> {
+                                                val hr = fcArgs["hour"]?.toString() ?: "7"
+                                                val min = fcArgs["minute"]?.toString() ?: "00"
+                                                val lbl = fcArgs["label"]?.toString() ?: "Alarm"
+                                                "Alarm set ho gaya hai for $hr:$min ('$lbl')! ⏰"
+                                            }
+                                            "send_sms", "sendSms" -> {
+                                                val recipient = fcArgs["recipient"]?.toString() ?: "Contact"
+                                                "SMS composer open kar diya hai for $recipient! ✉️"
+                                            }
+                                            "toggle_wifi", "toggleWifi" -> "Wi-Fi quick panel open kar diya hai! 📶"
+                                            "device_status", "getDeviceStatus" -> "Checking device hardware status... 📱"
+                                            "generate_image", "generateImage" -> "Generating AI image with Imagen 3... 🎨"
+                                            "toggle_flashlight", "toggleFlashlight" -> "Flashlight state toggled! 🔦"
+                                            "adjust_volume", "adjustVolume" -> "Volume adjusted! 🔊"
+                                            "make_call", "makeCall" -> "Dialer opened for call! 📞"
+                                            else -> "Action $fcName execute kar diya hai."
+                                        }
+                                        val finalText = if (fullAccumulator.isNotBlank()) fullAccumulator.toString().trim() else defaultActionResponse
+                                        callResp.close()
+                                        return@withContext Pair(finalText, null)
+                                    }
+
+                                    val finalText = fullAccumulator.toString().trim()
+                                    callResp.close()
+                                    if (finalText.isNotBlank()) {
+                                        return@withContext Pair(finalText, null)
+                                    }
+                                }
+                            }
                             response = callResp
                             hitRateLimit = false
                             break // Success!

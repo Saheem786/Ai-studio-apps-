@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Sam Ai</string>
+    <string name="accessibility_desc">Sam screen reading and multimodal visual analysis assistant.</string>
 </resources>

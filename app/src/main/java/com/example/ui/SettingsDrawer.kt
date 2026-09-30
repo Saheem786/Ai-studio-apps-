@@ -119,6 +119,8 @@ fun SettingsDrawerSheet(
     onOpenDiagnostics: () -> Unit,
     onClearChat: () -> Unit,
     onCloseDrawer: () -> Unit,
+    ttsVoiceStyle: String = "FEMALE",
+    onChangeTtsVoiceStyle: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var apiKeyText by remember(currentApiKey) { mutableStateOf(currentApiKey) }
@@ -474,6 +476,88 @@ fun SettingsDrawerSheet(
                                     text = "• Quick Prompt: \"${selectedLanguage.samplePrompt}\"",
                                     fontSize = 10.sp,
                                     color = SamCyanGlow
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // ==========================================
+            // SECTION: SAM VOICE PERSONALIZATION
+            // ==========================================
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = SamSurfaceElevated,
+                border = androidx.compose.foundation.BorderStroke(1.dp, SamSurfaceBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.VolumeUp,
+                            contentDescription = null,
+                            tint = SamCyan,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "Sam's Voice Persona",
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "Customize the speech tone or choose custom pitch profiles:",
+                        fontSize = 11.sp,
+                        color = SamTextSecondary,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+
+                    val voiceOptions = listOf(
+                        "FEMALE" to "Female Style 👩",
+                        "MALE" to "Male Style 👨",
+                        "NEUTRAL" to "Neutral Style 🤖"
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        voiceOptions.forEach { (styleKey, label) ->
+                            val isSelected = ttsVoiceStyle == styleKey
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (isSelected) SamCyan.copy(alpha = 0.25f) else SamSurface)
+                                    .border(
+                                        1.dp,
+                                        if (isSelected) SamCyan else SamSurfaceBorder,
+                                        RoundedCornerShape(10.dp)
+                                    )
+                                    .clickable { onChangeTtsVoiceStyle(styleKey) }
+                                    .padding(vertical = 10.dp)
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) SamCyan else SamTextPrimary
                                 )
                             }
                         }

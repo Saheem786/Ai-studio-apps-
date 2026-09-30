@@ -35,9 +35,16 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
@@ -219,6 +226,10 @@ fun SamScreen(
                     onCloseDrawer = {
                         coroutineScope.launch { drawerState.close() }
                         viewModel.toggleSettingsDrawer(false)
+                    },
+                    ttsVoiceStyle = uiState.ttsVoiceStyle,
+                    onChangeTtsVoiceStyle = { style ->
+                        viewModel.changeTtsVoiceStyle(style)
                     }
                 )
             }
@@ -324,6 +335,7 @@ fun SamScreen(
                 engineMode = uiState.engineMode,
                 onEngineModeChanged = { viewModel.setEngineMode(it) },
                 onRemoveAttachedImage = { viewModel.setAttachedImage(null) },
+                onAttachImage = { viewModel.setAttachedImage(it) },
                 onOpenToolsSheet = {
                     viewModel.toggleToolsSheet(true)
                 },
@@ -440,6 +452,56 @@ fun SamScreen(
                     )
                 }
 
+                // Image preview strip in Voice Mode if image is attached
+                uiState.attachedImageBase64?.let { base64 ->
+                    Row(
+                        modifier = Modifier
+                            .padding(top = 10.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(SamSurfaceElevated)
+                            .border(1.dp, SamCyan.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val bitmap = remember(base64) {
+                            try {
+                                val cleanBase64 = base64.substringAfter("base64,").trim()
+                                val bytes = android.util.Base64.decode(cleanBase64, android.util.Base64.DEFAULT)
+                                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            } catch (e: Exception) {
+                                null
+                            }
+                        }
+                        if (bitmap != null) {
+                            androidx.compose.foundation.Image(
+                                bitmap = bitmap.asImageBitmap(),
+                                contentDescription = "Attached image preview",
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(RoundedCornerShape(4.dp)),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                            )
+                        }
+                        Text(
+                            text = "Photo Attached",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = SamCyan,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Remove photo",
+                            tint = SamTextMuted,
+                            modifier = Modifier
+                                .size(14.dp)
+                                .clickable { viewModel.setAttachedImage(null) }
+                        )
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Quick Action Suggestion Chips
@@ -495,73 +557,178 @@ fun SamScreen(
                     label = "mic_ripple_scale"
                 )
 
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(104.dp)
-                        .scale(buttonScale)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(24.dp),
+                    modifier = Modifier.padding(vertical = 4.dp)
                 ) {
-                    // Dynamic acoustic ripple shockwave around mic button
-                    if (uiState.isMicActive) {
-                        Box(
-                            modifier = Modifier
-                                .size(104.dp)
-                                .scale(micRippleScale)
-                                .clip(CircleShape)
-                                .background(buttonBgColor.copy(alpha = (0.15f + uiState.amplitude * 0.25f).coerceIn(0f, 0.4f)))
-                        )
-                        Box(
-                            modifier = Modifier
-                                .size(88.dp)
-                                .clip(CircleShape)
-                                .background(buttonBgColor.copy(alpha = 0.28f))
+                    // Left flanking button: Camera / Gallery Attachment Dialog
+                    var showVoiceImageSourceDialog by remember { mutableStateOf(false) }
+
+                    val voiceCameraLauncher = rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.TakePicturePreview()
+                    ) { bitmap ->
+                        if (bitmap != null) {
+                            try {
+                                val outputStream = java.io.ByteArrayOutputStream()
+                                bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, outputStream)
+                                val bytes = outputStream.toByteArray()
+                                val base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.DEFAULT)
+                                viewModel.setAttachedImage(base64)
+                            } catch (e: Exception) {
+                                // ignore
+                            }
+                        }
+                    }
+
+                    val voiceGalleryLauncher = rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.GetContent()
+                    ) { uri ->
+                        if (uri != null) {
+                            try {
+                                val inputStream = context.contentResolver.openInputStream(uri)
+                                val bytes = inputStream?.readBytes()
+                                if (bytes != null) {
+                                    val base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.DEFAULT)
+                                    viewModel.setAttachedImage(base64)
+                                }
+                            } catch (e: Exception) {
+                                // ignore
+                            }
+                        }
+                    }
+
+                    if (showVoiceImageSourceDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showVoiceImageSourceDialog = false },
+                            title = { Text("Attach Image") },
+                            text = { Text("Capture or select a photo to ask Sam:") },
+                            confirmButton = {
+                                TextButton(
+                                    onClick = {
+                                        showVoiceImageSourceDialog = false
+                                        voiceCameraLauncher.launch(null)
+                                    }
+                                ) {
+                                    Text("Take Photo")
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(
+                                    onClick = {
+                                        showVoiceImageSourceDialog = false
+                                        voiceGalleryLauncher.launch("image/*")
+                                    }
+                                ) {
+                                    Text("Choose from Gallery")
+                                }
+                            },
+                            containerColor = SamSurfaceElevated,
+                            titleContentColor = SamTextPrimary,
+                            textContentColor = SamTextSecondary
                         )
                     }
 
-                    // Main interactive button
+                    IconButton(
+                        onClick = { showVoiceImageSourceDialog = true },
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(SamSurfaceElevated)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CameraAlt,
+                            contentDescription = "Attach Multimodal Image",
+                            tint = SamCyan,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+
+                    // Main interactive button Box
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .size(72.dp)
-                            .shadow(16.dp, CircleShape, spotColor = buttonBgColor)
-                            .clip(CircleShape)
-                            .background(buttonBgColor)
-                            .clickable { handleMicClick() }
-                            .testTag("microphone_power_button")
+                            .size(104.dp)
+                            .scale(buttonScale)
                     ) {
-                        when (uiState.state) {
-                            AssistantState.CONNECTING, AssistantState.THINKING -> {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(32.dp),
-                                    color = SamDarkBg,
-                                    strokeWidth = 3.dp
-                                )
-                            }
-                            AssistantState.LISTENING -> {
-                                Icon(
-                                    imageVector = Icons.Default.Mic,
-                                    contentDescription = "Microphone Active",
-                                    tint = SamDarkBg,
-                                    modifier = Modifier.size(36.dp)
-                                )
-                            }
-                            AssistantState.SPEAKING -> {
-                                Icon(
-                                    imageVector = Icons.Default.Stop,
-                                    contentDescription = "Stop Speaking",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(36.dp)
-                                )
-                            }
-                            else -> {
-                                Icon(
-                                    imageVector = Icons.Default.PowerSettingsNew,
-                                    contentDescription = "Start Sam",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(34.dp)
-                                )
+                        // Dynamic acoustic ripple shockwave around mic button
+                        if (uiState.isMicActive) {
+                            Box(
+                                modifier = Modifier
+                                    .size(104.dp)
+                                    .scale(micRippleScale)
+                                    .clip(CircleShape)
+                                    .background(buttonBgColor.copy(alpha = (0.15f + uiState.amplitude * 0.25f).coerceIn(0f, 0.4f)))
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(88.dp)
+                                    .clip(CircleShape)
+                                    .background(buttonBgColor.copy(alpha = 0.28f))
+                            )
+                        }
+
+                        // Main interactive button
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .size(72.dp)
+                                .shadow(16.dp, CircleShape, spotColor = buttonBgColor)
+                                .clip(CircleShape)
+                                .background(buttonBgColor)
+                                .clickable { handleMicClick() }
+                                .testTag("microphone_power_button")
+                        ) {
+                            when (uiState.state) {
+                                AssistantState.CONNECTING, AssistantState.THINKING -> {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(32.dp),
+                                        color = SamDarkBg,
+                                        strokeWidth = 3.dp
+                                    )
+                                }
+                                AssistantState.LISTENING -> {
+                                    Icon(
+                                        imageVector = Icons.Default.Mic,
+                                        contentDescription = "Microphone Active",
+                                        tint = SamDarkBg,
+                                        modifier = Modifier.size(36.dp)
+                                    )
+                                }
+                                AssistantState.SPEAKING -> {
+                                    Icon(
+                                        imageVector = Icons.Default.Stop,
+                                        contentDescription = "Stop Speaking",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(36.dp)
+                                    )
+                                }
+                                else -> {
+                                    Icon(
+                                        imageVector = Icons.Default.PowerSettingsNew,
+                                        contentDescription = "Start Sam",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(34.dp)
+                                    )
+                                }
                             }
                         }
+                    }
+
+                    // Right flanking Symmetry Settings Switch button
+                    IconButton(
+                        onClick = { viewModel.toggleSettingsDialog(true) },
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(SamSurfaceElevated)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Open Settings Dialog",
+                            tint = SamPurpleSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                 }
 
