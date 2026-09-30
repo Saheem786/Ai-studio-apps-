@@ -190,72 +190,39 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun `verify natural language intent mapping to actionable android intents`() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-
-        // 1. Call Intent Mapping ("call Mom")
-        val callIntent = com.example.device.intent.IntentFunctionMapper.mapNaturalLanguageToIntent("call Mom", context)
-        assertNotNull(callIntent)
-        assertEquals(com.example.device.intent.IntentType.CALL, callIntent?.type)
-        assertEquals("call_contact", callIntent?.actionName)
-        assertNotNull(callIntent?.androidIntent)
-        val callAction = callIntent?.androidIntent?.action
-        org.junit.Assert.assertTrue(callAction == android.content.Intent.ACTION_CALL || callAction == android.content.Intent.ACTION_DIAL)
-
-        // 2. Call Intent with phone number ("call 9876543210")
-        val callNumberIntent = com.example.device.intent.IntentFunctionMapper.mapNaturalLanguageToIntent("call 9876543210", context)
-        assertNotNull(callNumberIntent)
-        assertEquals(android.net.Uri.parse("tel:9876543210"), callNumberIntent?.androidIntent?.data)
-
-        // 3. Alarm Intent Mapping ("set alarm for 7:30 AM")
-        val alarmIntent = com.example.device.intent.IntentFunctionMapper.mapNaturalLanguageToIntent("set alarm for 7:30 AM", context)
-        assertNotNull(alarmIntent)
-        assertEquals(com.example.device.intent.IntentType.ALARM, alarmIntent?.type)
-        assertEquals("set_alarm", alarmIntent?.actionName)
-        assertEquals(android.provider.AlarmClock.ACTION_SET_ALARM, alarmIntent?.androidIntent?.action)
-        assertEquals(7, alarmIntent?.androidIntent?.getIntExtra(android.provider.AlarmClock.EXTRA_HOUR, -1))
-        assertEquals(30, alarmIntent?.androidIntent?.getIntExtra(android.provider.AlarmClock.EXTRA_MINUTES, -1))
-
-        // 4. Alarm with PM and Label ("set alarm for meeting at 6:15 pm")
-        val meetingAlarm = com.example.device.intent.IntentFunctionMapper.mapNaturalLanguageToIntent("set alarm for meeting at 6:15 pm", context)
-        assertNotNull(meetingAlarm)
-        assertEquals(18, meetingAlarm?.androidIntent?.getIntExtra(android.provider.AlarmClock.EXTRA_HOUR, -1))
-        assertEquals(15, meetingAlarm?.androidIntent?.getIntExtra(android.provider.AlarmClock.EXTRA_MINUTES, -1))
-        assertEquals("Meeting", meetingAlarm?.androidIntent?.getStringExtra(android.provider.AlarmClock.EXTRA_MESSAGE))
-
-        // 5. Timer Intent Mapping ("set timer for 10 minutes")
-        val timerIntent = com.example.device.intent.IntentFunctionMapper.mapNaturalLanguageToIntent("set timer for 10 minutes", context)
-        assertNotNull(timerIntent)
-        assertEquals(com.example.device.intent.IntentType.TIMER, timerIntent?.type)
-        assertEquals(android.provider.AlarmClock.ACTION_SET_TIMER, timerIntent?.androidIntent?.action)
-        assertEquals(600, timerIntent?.androidIntent?.getIntExtra(android.provider.AlarmClock.EXTRA_LENGTH, -1))
-
-        // 6. SMS Intent Mapping ("send SMS to Rahul hello I am outside")
-        val smsIntent = com.example.device.intent.IntentFunctionMapper.mapNaturalLanguageToIntent("send SMS to Rahul hello I am outside", context)
-        assertNotNull(smsIntent)
-        assertEquals(com.example.device.intent.IntentType.SMS, smsIntent?.type)
-        assertEquals(android.content.Intent.ACTION_SENDTO, smsIntent?.androidIntent?.action)
-        assertEquals("hello I am outside", smsIntent?.androidIntent?.getStringExtra("sms_body"))
-
-        // 7. Navigation Intent Mapping ("navigate to Airport")
-        val navIntent = com.example.device.intent.IntentFunctionMapper.mapNaturalLanguageToIntent("navigate to Airport", context)
-        assertNotNull(navIntent)
-        assertEquals(com.example.device.intent.IntentType.NAVIGATION, navIntent?.type)
-        assertEquals(android.content.Intent.ACTION_VIEW, navIntent?.androidIntent?.action)
-        assertEquals(android.net.Uri.parse("google.navigation:q=Airport"), navIntent?.androidIntent?.data)
-
-        // 8. YouTube Intent Mapping ("play Believer on YouTube")
-        val ytIntent = com.example.device.intent.IntentFunctionMapper.mapNaturalLanguageToIntent("play Believer on YouTube", context)
-        assertNotNull(ytIntent)
-        assertEquals(com.example.device.intent.IntentType.YOUTUBE, ytIntent?.type)
-        assertEquals(android.content.Intent.ACTION_SEARCH, ytIntent?.androidIntent?.action)
-        assertEquals("Believer", ytIntent?.androidIntent?.getStringExtra("query"))
-
-        // 9. Hardware Flashlight Control ("turn on flashlight")
-        val flashIntent = com.example.device.intent.IntentFunctionMapper.mapNaturalLanguageToIntent("turn on flashlight", context)
-        assertNotNull(flashIntent)
-        assertEquals(com.example.device.intent.IntentType.SYSTEM_CONTROL, flashIntent?.type)
-        assertEquals("toggle_flashlight", flashIntent?.actionName)
-        assertEquals(true, flashIntent?.parameters?.get("enabled"))
+    fun `verify human companion persona instructions and conversational rules`() {
+        val instruction = com.example.gemini.SamPersonality.SYSTEM_INSTRUCTION
+        org.junit.Assert.assertTrue(
+            "Should state Sam is NOT an AI or chatbot",
+            instruction.contains("You are Sam. You are NOT an AI, a chatbot, or a virtual assistant.")
+        )
+        org.junit.Assert.assertTrue(
+            "Should include smart chill close friend persona",
+            instruction.contains("smart, chill, dependable close friend")
+        )
+        org.junit.Assert.assertTrue(
+            "Should include CONVERSATIONAL RULES (STRICT)",
+            instruction.contains("CONVERSATIONAL RULES (STRICT):")
+        )
+        org.junit.Assert.assertTrue(
+            "Should forbid robotic introductions",
+            instruction.contains("Never introduce yourself as an AI, language model, or virtual assistant.")
+        )
+        org.junit.Assert.assertTrue(
+            "Should mandate authentic Hinglish vocabulary",
+            instruction.contains("Tone & Vocabulary: Speak natural, authentic everyday Hinglish")
+        )
+        org.junit.Assert.assertTrue(
+            "Should mandate concise responses",
+            instruction.contains("Brevity & Flow: Keep spoken voice responses concise (1 to 3 natural sentences).")
+        )
+        org.junit.Assert.assertTrue(
+            "Should mandate human empathy and buddy reactions",
+            instruction.contains("Emotion & Relatability: React with genuine human curiosity, humor, and empathy.")
+        )
+        org.junit.Assert.assertTrue(
+            "Should mandate speech punctuation for natural cadence",
+            instruction.contains("Punctuation for Speech: Write text with commas and short pauses so the text-to-speech engine speaks naturally without rushing.")
+        )
     }
 }

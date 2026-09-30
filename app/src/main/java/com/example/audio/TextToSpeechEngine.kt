@@ -1,6 +1,7 @@
 package com.example.audio
 
 import android.content.Context
+import android.media.AudioAttributes
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -91,33 +92,62 @@ class TextToSpeechEngine(
     private fun configureLocaleAndVoice() {
         val currentTts = tts ?: return
 
+        // 3. Audio Attributes: Configure for high-fidelity speech assistant playback
+        try {
+            val audioAttributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ASSISTANT)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build()
+            currentTts.setAudioAttributes(audioAttributes)
+        } catch (e: Exception) {
+            Log.w(TAG, "AudioAttributes configuration fallback", e)
+        }
+
         val targetLocale = currentLanguage.ttsLocale
         val result = currentTts.setLanguage(targetLocale)
         if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-            Log.w(TAG, "${currentLanguage.displayName} Locale not fully supported, falling back to US English")
-            currentTts.setLanguage(Locale.US)
+            Log.w(TAG, "${currentLanguage.displayName} Locale not fully supported, falling back to Indian English/Hindi")
+            val inResult = currentTts.setLanguage(Locale("en", "IN"))
+            if (inResult == TextToSpeech.LANG_MISSING_DATA || inResult == TextToSpeech.LANG_NOT_SUPPORTED) {
+                currentTts.setLanguage(Locale("hi", "IN"))
+            }
         }
 
-        // Try to assign a matching high-quality voice for the target language
+        // 1. Voice Selection:
+        // Query available voices on the device using textToSpeech.voices.
+        // Prefer high-quality/network neural Indian voices (Target names containing: "hi-in-x", "en-in-x", "hi_in", "en_in")
         try {
-            val matchedVoice = currentTts.voices?.firstOrNull { voice ->
-                voice.locale.language == currentLanguage.ttsLanguage && !voice.isNetworkConnectionRequired
-            } ?: currentTts.voices?.firstOrNull { voice ->
-                voice.locale.language == currentLanguage.ttsLanguage
-            } ?: currentTts.voices?.firstOrNull { voice ->
-                voice.locale.language == "en"
-            }
+            val availableVoices = currentTts.voices
+            if (!availableVoices.isNullOrEmpty()) {
+                val preferredIndianVoice = availableVoices.firstOrNull { voice ->
+                    val nameLower = voice.name.lowercase()
+                    (nameLower.contains("hi-in-x") || nameLower.contains("en-in-x") ||
+                     nameLower.contains("hi_in") || nameLower.contains("en_in")) &&
+                     !voice.isNetworkConnectionRequired
+                } ?: availableVoices.firstOrNull { voice ->
+                    val nameLower = voice.name.lowercase()
+                    nameLower.contains("hi-in-x") || nameLower.contains("en-in-x") ||
+                    nameLower.contains("hi_in") || nameLower.contains("en_in")
+                } ?: availableVoices.firstOrNull { voice ->
+                    voice.locale == Locale("hi", "IN") || voice.locale == Locale("en", "IN")
+                } ?: availableVoices.firstOrNull { voice ->
+                    voice.locale.language == currentLanguage.ttsLanguage
+                }
 
-            matchedVoice?.let {
-                currentTts.voice = it
-                onDiagnosticLog("Assigned TTS voice for ${currentLanguage.displayName}: ${it.name}")
+                preferredIndianVoice?.let {
+                    currentTts.voice = it
+                    onDiagnosticLog("Assigned warm natural voice: ${it.name} (${it.locale})")
+                    Log.i(TAG, "Selected natural human voice: ${it.name}")
+                }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to apply voice for ${currentLanguage.displayName}", e)
+            Log.e(TAG, "Failed to apply natural voice selection", e)
         }
 
-        currentTts.setPitch(1.0f)
-        currentTts.setSpeechRate(1.02f)
+        // 2. Human Pitch & Speech Rate:
+        // Slightly elevated pitch for warmth, and relaxed conversational pace
+        currentTts.setPitch(1.02f)      // Slightly elevated for warmth and natural human expression
+        currentTts.setSpeechRate(0.96f)  // Slightly relaxed conversational pace (avoids robotic fast reading)
     }
 
     private fun setupUtteranceListener() {

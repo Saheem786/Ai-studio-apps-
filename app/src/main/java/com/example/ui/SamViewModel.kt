@@ -65,7 +65,7 @@ data class SamUiState(
     val chatMessages: List<ChatMessage> = listOf(
         ChatMessage(
             sender = MessageSender.ASSISTANT,
-            text = "Hello! Main Sam hoon. Aap mujhse bol kar ya text chat mein kuch bhi pooch sakte hain aur device actions (WhatsApp, Call, YouTube, etc.) chala sakte hain."
+            text = "Hey! Sam here. Kaho yaar, kya chal raha hai? Kuch sunna hai, phone pe koi kaam karwana hai, ya bas baat karni hai?"
         )
     ),
     val inputText: String = "",
@@ -2193,37 +2193,6 @@ $tempo beats per minute, fading out...
         val cleanCommand = text.replace(Regex("(?i)^(hey\\s+)?(arushi|sam|assistant)(\\s+ai)?[,\\s]*"), "").trim()
         val effectiveText = if (cleanCommand.isNotBlank()) cleanCommand else text
         val lower = effectiveText.lowercase()
-
-        // ⚡ Intelligent Function Mapping: Translates Natural Language Intents (e.g. "call Mom", "set alarm") into Actionable Android Intents
-        val context = getApplication<Application>().applicationContext
-        val mappedAction = com.example.device.intent.IntentFunctionMapper.mapNaturalLanguageToIntent(effectiveText, context)
-        if (mappedAction != null) {
-            addLog("Function Mapper: '$effectiveText' -> Actionable Intent '${mappedAction.actionName}' (${mappedAction.type.displayName})")
-            val execResult = mappedAction.execute(context)
-            val replyText = if (execResult.isSuccess) mappedAction.confirmationSpeech else execResult.message
-
-            val actionMsg = ChatMessage(
-                sender = MessageSender.ASSISTANT,
-                text = replyText,
-                isAction = true,
-                actionName = mappedAction.actionName,
-                actionDetail = mappedAction.summary
-            )
-            viewModelScope.launch {
-                chatRepository.saveMessage(actionMsg)
-            }
-            if (_uiState.value.currentMode == AppMode.VOICE) {
-                ttsEngine?.speak(replyText)
-            }
-            _uiState.update { 
-                it.copy(
-                    actionBanner = replyText,
-                    state = if (_uiState.value.currentMode == AppMode.VOICE) AssistantState.SPEAKING else AssistantState.IDLE,
-                    isSendingChat = false
-                ) 
-            }
-            return
-        }
 
         // Direct System Actions Execution for Arushi (Alarms, SMS, Wi-Fi, Torch, Volume, Battery)
         if (handleSystemActionCommand(effectiveText, lower)) {
