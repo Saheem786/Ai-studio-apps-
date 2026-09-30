@@ -278,7 +278,66 @@ class DeviceActionManager(private val context: Context) {
         }
     }
 
-    private fun searchContacts(query: String): List<ContactItem> {
+    /**
+     * Send SMS or open SMS composer with recipient and message
+     */
+    fun sendSms(rawRecipient: String, rawMessage: String): DeviceActionResult {
+        Log.d(TAG, "Executing sendSms for '$rawRecipient' with message '$rawMessage'")
+        val cleanQuery = rawRecipient.trim()
+        val cleanMsg = rawMessage.trim()
+
+        val digits = cleanQuery.filter { it.isDigit() || it == '+' }
+        var targetPhoneNumber = digits
+        var recipientDisplayName = cleanQuery
+
+        // If not a pure phone number, try to resolve via contacts
+        if (digits.length < 7 && cleanQuery.isNotBlank() && cleanQuery.any { it.isLetter() }) {
+            val contacts = searchContacts(cleanQuery)
+            if (contacts.isNotEmpty()) {
+                targetPhoneNumber = contacts.first().phoneNumber
+                recipientDisplayName = "${contacts.first().name} ($targetPhoneNumber)"
+            }
+        }
+
+        return try {
+            val uri = if (targetPhoneNumber.isNotBlank()) {
+                Uri.parse("smsto:${targetPhoneNumber.filter { it.isDigit() || it == '+' }}")
+            } else {
+                Uri.parse("smsto:")
+            }
+            val intent = Intent(Intent.ACTION_SENDTO, uri).apply {
+                if (cleanMsg.isNotBlank()) {
+                    putExtra("sms_body", cleanMsg)
+                    putExtra(Intent.EXTRA_TEXT, cleanMsg)
+                }
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            val successMsg = if (targetPhoneNumber.isNotBlank()) {
+                "SMS composer open kar diya hai for $recipientDisplayName! ✉️"
+            } else {
+                "SMS composer open kar diya hai! ✉️"
+            }
+            Log.i(TAG, successMsg)
+            DeviceActionResult.Success("sendSms", successMsg)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to open SMS composer", e)
+            try {
+                // Generic send fallback
+                val fallbackIntent = Intent(Intent.ACTION_VIEW).apply {
+                    type = "vnd.android-dir/mms-sms"
+                    if (cleanMsg.isNotBlank()) putExtra("sms_body", cleanMsg)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(fallbackIntent)
+                DeviceActionResult.Success("sendSms", "SMS app open kar diya hai! ✉️")
+            } catch (err: Exception) {
+                DeviceActionResult.Failure("sendSms", "Could not open SMS: ${e.message}")
+            }
+        }
+    }
+
+    fun searchContacts(query: String): List<ContactItem> {
         val results = mutableListOf<ContactItem>()
         val contentResolver = context.contentResolver
         val uri = ContactsContract.CommonDataKinds.Phone.CONTENT_URI

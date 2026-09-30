@@ -11,6 +11,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.BuildConfig
 import com.example.audio.AudioTrackPlayer
+import com.example.audio.AssistantLanguage
 import com.example.audio.MicrophoneRecorder
 import com.example.audio.TextToSpeechEngine
 import com.example.audio.VoiceInputHandler
@@ -22,6 +23,8 @@ import com.example.device.DeviceActionResult
 import com.example.gemini.SamPersonality
 import com.example.gemini.GeminiLiveService
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -90,7 +93,8 @@ data class SamUiState(
     val showAvatarPersonaDialog: Boolean = false,
     val currentPersona: String = "SAM",
     val showMusicStudioDialog: Boolean = false,
-    val wakeWordEnabled: Boolean = false
+    val wakeWordEnabled: Boolean = false,
+    val selectedLanguage: AssistantLanguage = AssistantLanguage.HINGLISH
 )
 
 class SamViewModel(application: Application) : AndroidViewModel(application) {
@@ -185,6 +189,9 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
             AppThemeAccent.CLASSIC
         }
 
+        val savedLangCode = prefs.getString("selected_speech_language", AssistantLanguage.HINGLISH.code)
+        val initialLanguage = AssistantLanguage.fromCode(savedLangCode)
+
         // Apply selected persona directly to static instructions
         com.example.gemini.SamPersonality.updatePersona(savedPersona)
 
@@ -198,11 +205,14 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                 floatingWidgetEnabled = isFloatingWidgetOn,
                 themeAccent = themeAccent,
                 wakeWordEnabled = isWakeWordOn,
-                currentPersona = savedPersona
+                currentPersona = savedPersona,
+                selectedLanguage = initialLanguage
             ) 
         }
 
         initAudioSystem()
+        voiceInputHandler?.setLanguage(initialLanguage)
+        ttsEngine?.setLanguage(initialLanguage)
         geminiService?.setApiKey(initialKey)
         if (initialKey.isNotBlank()) {
             addLog("Loaded Gemini API key from storage (${initialKey.take(4)}...${initialKey.takeLast(4)})")
@@ -285,15 +295,23 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
             },
             onErrorOccurred = { errMsg, isTimeout ->
                 addLog("Voice input status: $errMsg (timeout=$isTimeout)")
+                // Suppress recognizer errors if assistant is already processing (THINKING) or speaking (SPEAKING)
+                if (_uiState.value.state == AssistantState.THINKING || _uiState.value.state == AssistantState.SPEAKING) {
+                    addLog("Suppressed recognizer event '$errMsg' during ${_uiState.value.state} state")
+                    return@VoiceInputHandler
+                }
+
                 if (isTimeout && _uiState.value.currentMode == AppMode.VOICE && _uiState.value.isMicActive && _uiState.value.state == AssistantState.LISTENING) {
                     viewModelScope.launch {
-                        delay(400)
+                        delay(350)
                         if (_uiState.value.state == AssistantState.LISTENING && _uiState.value.isMicActive) {
                             voiceInputHandler?.startListening()
                         }
                     }
                 } else if (!isTimeout) {
-                    _uiState.update { it.copy(amplitude = 0f, errorMessage = errMsg, actionBanner = errMsg) }
+                    if (!errMsg.contains("Client", ignoreCase = true) && !errMsg.contains("busy", ignoreCase = true)) {
+                        _uiState.update { it.copy(amplitude = 0f, errorMessage = errMsg, actionBanner = errMsg) }
+                    }
                 }
             },
             onDiagnosticLog = { logMsg ->
@@ -1077,6 +1095,7 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
             it.copy(
                 state = AssistantState.THINKING,
                 actionBanner = "Sam is thinking...",
+                errorMessage = null,
                 transcript = "You: $trimmed",
                 amplitude = 0f
             )
@@ -1286,7 +1305,7 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
         addLog("Gemini API key updated and saved into SharedPreferences")
     }
 
-    fun updateSettings(newKey: String, newModel: String) {
+    fun updateSettings(newKey: String, newModel: String, newLanguage: AssistantLanguage = _uiState.value.selectedLanguage) {
         val trimmedKey = newKey.trim()
         val cleanModel = newModel.trim().removePrefix("models/").ifBlank { "gemini-3.8-flash" }
         val prefs = getApplication<Application>().getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
@@ -1294,17 +1313,30 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
             .putString("gemini_api_key", trimmedKey)
             .putString("custom_gemini_key", trimmedKey)
             .putString("selected_gemini_model", cleanModel)
+            .putString("selected_speech_language", newLanguage.code)
             .commit()
         geminiService?.setApiKey(trimmedKey)
+        voiceInputHandler?.setLanguage(newLanguage)
+        ttsEngine?.setLanguage(newLanguage)
         _uiState.update { 
             it.copy(
                 apiKey = trimmedKey, 
                 selectedModel = cleanModel, 
+                selectedLanguage = newLanguage,
                 showSettingsDialog = false, 
                 errorMessage = null
             ) 
         }
-        addLog("Gemini Settings saved: API Key updated, Model set to '$cleanModel'")
+        addLog("Settings saved: Model set to '$cleanModel', Voice language set to '${newLanguage.displayName}' (${newLanguage.speechLocale})")
+    }
+
+    fun setLanguage(language: AssistantLanguage) {
+        val prefs = getApplication<Application>().getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("selected_speech_language", language.code).apply()
+        _uiState.update { it.copy(selectedLanguage = language) }
+        voiceInputHandler?.setLanguage(language)
+        ttsEngine?.setLanguage(language)
+        addLog("Speech recognition & voice language set to: ${language.displayName} (${language.speechLocale})")
     }
 
     fun toggleDiagnosticsSheet(show: Boolean) {
@@ -1722,6 +1754,213 @@ $tempo beats per minute, fading out...
         _uiState.update { it.copy(inputText = text) }
     }
 
+    private fun extractSmsDetails(text: String): Pair<String, String> {
+        val clean = text.trim()
+
+        // Pattern 1: "send (an) sms/message/text to <recipient> <body/msg>"
+        val pattern1 = Regex("(?i)^(?:send|shoot|draft)?\\s*(?:an?\\s+)?(?:sms|message|msg|text)\\s+(?:to\\s+)?([a-zA-Z0-9+_]+)[,:\\s]+(.*)$")
+        val match1 = pattern1.find(clean)
+        if (match1 != null) {
+            val recipient = match1.groupValues[1].trim()
+            val body = match1.groupValues[2].trim()
+            if (recipient.isNotBlank()) {
+                return Pair(recipient, body)
+            }
+        }
+
+        // Pattern 2: "<recipient> ko sms/message bhejo <msg>"
+        val pattern2 = Regex("(?i)^([a-zA-Z0-9+_]+)\\s+ko\\s+(?:sms|message|msg|text)\\s+(?:bhejo|karo|send karo)[,:\\s]*(.*)$")
+        val match2 = pattern2.find(clean)
+        if (match2 != null) {
+            val recipient = match2.groupValues[1].trim()
+            val body = match2.groupValues[2].trim()
+            return Pair(recipient, body)
+        }
+
+        // Pattern 3: "sms/message bhejo <recipient> ko <msg>"
+        val pattern3 = Regex("(?i)^(?:sms|message|msg|text)\\s+bhejo\\s+([a-zA-Z0-9+_]+)(?:\\s+ko)?[,:\\s]*(.*)$")
+        val match3 = pattern3.find(clean)
+        if (match3 != null) {
+            val recipient = match3.groupValues[1].trim()
+            val body = match3.groupValues[2].trim()
+            return Pair(recipient, body)
+        }
+
+        // Pattern 4: "text <recipient> <msg>"
+        val pattern4 = Regex("(?i)^text\\s+([a-zA-Z0-9+_]+)[,:\\s]+(.*)$")
+        val match4 = pattern4.find(clean)
+        if (match4 != null) {
+            val recipient = match4.groupValues[1].trim()
+            val body = match4.groupValues[2].trim()
+            return Pair(recipient, body)
+        }
+
+        // Fallback: look for 10+ digits or phone format
+        val digitsMatch = Regex("(\\+?\\d{10,13})").find(clean)
+        if (digitsMatch != null) {
+            val phone = digitsMatch.value
+            val body = clean.replace(phone, "").replace(Regex("(?i)(send|sms|message|to|ko|bhejo)"), "").trim()
+            return Pair(phone, body)
+        }
+
+        // If no recipient matched, treat entire text cleaned as body
+        val cleanedBody = clean.replace(Regex("(?i)^(send\\s+)?(sms|message|text)\\s*"), "").trim()
+        return Pair("", cleanedBody)
+    }
+
+    private fun handleSystemActionCommand(text: String, lower: String): Boolean {
+        // 1. Toggling Wi-Fi (Voice commands: "turn on wifi", "turn off wifi", "toggle wifi", "wifi on karo", "wifi band karo", "enable wifi", "disable wifi")
+        val isWifiQuery = lower.contains("wifi") || lower.contains("wi-fi")
+        if (isWifiQuery && (lower.contains("on") || lower.contains("off") || lower.contains("turn") ||
+                    lower.contains("toggle") || lower.contains("enable") || lower.contains("disable") ||
+                    lower.contains("chalu") || lower.contains("band") || lower.contains("karo") ||
+                    lower.contains("settings") || lower.contains("panel"))) {
+            val enable = when {
+                lower.contains("off") || lower.contains("band") || lower.contains("disable") -> false
+                lower.contains("on") || lower.contains("chalu") || lower.contains("enable") -> true
+                else -> null
+            }
+            val result = samTools.toggleWifi(enable)
+            val msg = result.message
+            val actionMsg = ChatMessage(
+                sender = MessageSender.ASSISTANT,
+                text = msg,
+                isAction = true,
+                actionName = "toggle_wifi",
+                actionDetail = msg
+            )
+            viewModelScope.launch { chatRepository.saveMessage(actionMsg) }
+            if (_uiState.value.currentMode == AppMode.VOICE) {
+                ttsEngine?.speak(msg)
+            }
+            _uiState.update { it.copy(actionBanner = msg, isSendingChat = false) }
+            return true
+        }
+
+        // 2. Setting Alarms (Voice commands: "set alarm for 7 am", "set alarm at 6:30", "wake me up at 8 am", "7 baje ka alarm lagao", "alarm set karo 6 baje")
+        val isAlarmQuery = lower.contains("alarm") || lower.contains("wake me up") ||
+                lower.contains("jaga dena") || lower.contains("jagana") ||
+                lower.contains("baje ka") || lower.contains("baje uthana")
+        if (isAlarmQuery) {
+            val parseResult = deviceSystemManager.parseAndSetAlarm(text)
+            val finalResult = parseResult ?: run {
+                samTools.setAlarm(7, 0, "Arushi Alarm")
+                Pair(true, "Subah 7:00 baje ka alarm set kar diya hai! ⏰")
+            }
+            val msg = finalResult.second
+            val actionMsg = ChatMessage(
+                sender = MessageSender.ASSISTANT,
+                text = msg,
+                isAction = true,
+                actionName = "set_alarm",
+                actionDetail = msg
+            )
+            viewModelScope.launch { chatRepository.saveMessage(actionMsg) }
+            if (_uiState.value.currentMode == AppMode.VOICE) {
+                ttsEngine?.speak(msg)
+            }
+            _uiState.update { it.copy(actionBanner = msg, isSendingChat = false) }
+            return true
+        }
+
+        // 3. Sending SMS (Voice commands: "send sms to 9876543210 Hello", "send sms to Rahul on the way", "Rahul ko SMS bhejo", "message bhejo 9876543210")
+        val isSmsQuery = (lower.contains("sms") || (lower.contains("text") && !lower.contains("texture")) ||
+                lower.contains("message bhejo") || lower.contains("msg bhejo") || lower.contains("sms bhejo") ||
+                lower.contains("ko message") || lower.contains("ko msg") || lower.contains("ko text")) &&
+                !lower.contains("whatsapp")
+        if (isSmsQuery) {
+            val (recipient, body) = extractSmsDetails(text)
+            val result = samTools.sendSms(recipient, body)
+            val msg = result.message
+            val actionMsg = ChatMessage(
+                sender = MessageSender.ASSISTANT,
+                text = msg,
+                isAction = true,
+                actionName = "send_sms",
+                actionDetail = msg
+            )
+            viewModelScope.launch { chatRepository.saveMessage(actionMsg) }
+            if (_uiState.value.currentMode == AppMode.VOICE) {
+                ttsEngine?.speak(msg)
+            }
+            _uiState.update { it.copy(actionBanner = msg, isSendingChat = false) }
+            return true
+        }
+
+        // 4. Flashlight Toggle
+        if ((lower.contains("flashlight") || lower.contains("torch")) &&
+            (lower.contains("on") || lower.contains("off") || lower.contains("turn") ||
+             lower.contains("chalu") || lower.contains("band") || lower.contains("karo"))) {
+            val enable = !(lower.contains("off") || lower.contains("band") || lower.contains("disable"))
+            val result = samTools.toggleFlashlight(enable)
+            val msg = result.message
+            val actionMsg = ChatMessage(
+                sender = MessageSender.ASSISTANT,
+                text = msg,
+                isAction = true,
+                actionName = "toggle_flashlight",
+                actionDetail = msg
+            )
+            viewModelScope.launch { chatRepository.saveMessage(actionMsg) }
+            if (_uiState.value.currentMode == AppMode.VOICE) {
+                ttsEngine?.speak(msg)
+            }
+            _uiState.update { it.copy(actionBanner = msg, isSendingChat = false) }
+            return true
+        }
+
+        // 5. Volume Control
+        if (lower.contains("volume") || lower.contains("awaaz") || lower.contains("awaz")) {
+            val action = when {
+                lower.contains("up") || lower.contains("badhao") || lower.contains("increase") -> "UP"
+                lower.contains("down") || lower.contains("kam") || lower.contains("decrease") -> "DOWN"
+                lower.contains("mute") || lower.contains("silent") || lower.contains("band") -> "MUTE"
+                lower.contains("max") || lower.contains("full") -> "MAX"
+                else -> null
+            }
+            if (action != null) {
+                val result = samTools.adjustVolume(action, null)
+                val msg = result.message
+                val actionMsg = ChatMessage(
+                    sender = MessageSender.ASSISTANT,
+                    text = msg,
+                    isAction = true,
+                    actionName = "adjust_volume",
+                    actionDetail = msg
+                )
+                viewModelScope.launch { chatRepository.saveMessage(actionMsg) }
+                if (_uiState.value.currentMode == AppMode.VOICE) {
+                    ttsEngine?.speak(msg)
+                }
+                _uiState.update { it.copy(actionBanner = msg, isSendingChat = false) }
+                return true
+            }
+        }
+
+        // 6. Battery Status
+        if (lower.contains("battery") && (lower.contains("status") || lower.contains("level") ||
+                    lower.contains("check") || lower.contains("kitni") || lower.contains("percent"))) {
+            val result = samTools.getDeviceStatus()
+            val msg = result.message
+            val actionMsg = ChatMessage(
+                sender = MessageSender.ASSISTANT,
+                text = msg,
+                isAction = true,
+                actionName = "device_status",
+                actionDetail = msg
+            )
+            viewModelScope.launch { chatRepository.saveMessage(actionMsg) }
+            if (_uiState.value.currentMode == AppMode.VOICE) {
+                val batteryReport = deviceSystemManager.getBatteryInfo()
+                ttsEngine?.speak(batteryReport)
+            }
+            _uiState.update { it.copy(actionBanner = msg, isSendingChat = false) }
+            return true
+        }
+
+        return false
+    }
+
     fun sendChatMessage(rawText: String) {
         val text = rawText.trim()
         if (text.isBlank()) return
@@ -1775,8 +2014,15 @@ $tempo beats per minute, fading out...
             return
         }
 
-        // Check if message corresponds to a common device action
-        val lower = text.lowercase()
+        // Strip assistant invocation prefix ("Arushi", "Hey Arushi", "Sam", "Assistant", etc.)
+        val cleanCommand = text.replace(Regex("(?i)^(hey\\s+)?(arushi|sam|assistant)(\\s+ai)?[,\\s]*"), "").trim()
+        val effectiveText = if (cleanCommand.isNotBlank()) cleanCommand else text
+        val lower = effectiveText.lowercase()
+
+        // Direct System Actions Execution for Arushi (Alarms, SMS, Wi-Fi, Torch, Volume, Battery)
+        if (handleSystemActionCommand(effectiveText, lower)) {
+            return
+        }
 
         // Check for YouTube song play or search intent (e.g., 'rudali song play karo', 'chalao', 'baja', 'sunao', 'suno')
         if ((lower.contains("youtube") && (lower.contains("play") || lower.contains("chalao") || lower.contains("search") || lower.contains("suno") || lower.contains("gana") || lower.contains("song") || lower.contains("baja") || lower.contains("sunao") || lower.contains("karo"))) ||
@@ -1889,58 +2135,111 @@ $tempo beats per minute, fading out...
         }
 
         viewModelScope.launch {
-            val prefs = getApplication<Application>().getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
-            val savedKey = prefs.getString("gemini_api_key", "")?.trim()?.ifEmpty {
-                prefs.getString("custom_gemini_key", "")?.trim()
-            } ?: ""
-            
-            val effectiveKey = if (savedKey.isNotBlank() && savedKey != "MY_GEMINI_API_KEY") {
-                savedKey
-            } else {
-                val stateKey = _uiState.value.apiKey.trim()
-                if (stateKey.isNotBlank() && stateKey != "MY_GEMINI_API_KEY") {
-                    stateKey
+            try {
+                _uiState.update {
+                    it.copy(
+                        state = AssistantState.THINKING,
+                        actionBanner = "Sam is thinking...",
+                        errorMessage = null
+                    )
+                }
+
+                val prefs = getApplication<Application>().getSharedPreferences("sam_prefs", Context.MODE_PRIVATE)
+                val savedKey = prefs.getString("gemini_api_key", "")?.trim()?.ifEmpty {
+                    prefs.getString("custom_gemini_key", "")?.trim()
+                } ?: ""
+                
+                val effectiveKey = if (savedKey.isNotBlank() && savedKey != "MY_GEMINI_API_KEY") {
+                    savedKey
                 } else {
-                    try {
-                        BuildConfig.GEMINI_API_KEY.trim()
-                    } catch (e: Exception) {
-                        ""
+                    val stateKey = _uiState.value.apiKey.trim()
+                    if (stateKey.isNotBlank() && stateKey != "MY_GEMINI_API_KEY") {
+                        stateKey
+                    } else {
+                        try {
+                            BuildConfig.GEMINI_API_KEY.trim()
+                        } catch (e: Exception) {
+                            ""
+                        }
                     }
                 }
-            }
 
-            if (effectiveKey.isNotBlank()) {
-                geminiService?.setApiKey(effectiveKey)
-                if (_uiState.value.apiKey != effectiveKey) {
-                    _uiState.update { it.copy(apiKey = effectiveKey) }
+                if (effectiveKey.isNotBlank()) {
+                    geminiService?.setApiKey(effectiveKey)
+                    if (_uiState.value.apiKey != effectiveKey) {
+                        _uiState.update { it.copy(apiKey = effectiveKey) }
+                    }
                 }
-            }
 
-            if (geminiService?.isSessionActive() == true) {
-                geminiService?.sendUserText(text)
-                _uiState.update { it.copy(isSendingChat = false) }
-            } else {
-                val (reply, audioBase64) = geminiService?.generateChatResponse(
-                    prompt = text,
-                    base64Image = attachedImg,
-                    isDeepResearch = isDeepResearch,
-                    preferredModel = _uiState.value.selectedModel
-                ) ?: Pair("Sam is unavailable right now.", null)
+                val replyText: String
+                var responseAudio: String? = null
+
+                if (geminiService?.isSessionActive() == true) {
+                    geminiService?.sendUserText(text)
+                    replyText = ""
+                } else {
+                    val result = withTimeoutOrNull(8500L) {
+                        withContext(Dispatchers.IO) {
+                            geminiService?.generateChatResponse(
+                                prompt = text,
+                                base64Image = attachedImg,
+                                isDeepResearch = isDeepResearch,
+                                preferredModel = _uiState.value.selectedModel
+                            )
+                        }
+                    } ?: Pair("Maaf kijiye, server connect nahi ho paya. Ek baar phir bole.", null)
+                    replyText = result.first
+                    responseAudio = result.second
+                }
+
+                if (replyText.isNotBlank()) {
+                    val assistantMsg = ChatMessage(
+                        sender = MessageSender.ASSISTANT,
+                        text = replyText
+                    )
+                    chatRepository.saveMessage(assistantMsg)
+                    _uiState.update {
+                        it.copy(
+                            isSendingChat = false,
+                            errorMessage = null,
+                            actionBanner = "Sam is Speaking...",
+                            state = AssistantState.SPEAKING
+                        )
+                    }
+
+                    if (_uiState.value.currentMode == AppMode.VOICE) {
+                        if (!responseAudio.isNullOrEmpty()) {
+                            audioPlayer?.enqueueChunk(responseAudio)
+                        } else {
+                            speakMessage(replyText)
+                        }
+                    } else {
+                        _uiState.update { it.copy(state = AssistantState.IDLE) }
+                    }
+                } else {
+                    _uiState.update { it.copy(isSendingChat = false) }
+                }
+            } catch (e: Exception) {
+                Log.e("SamViewModel", "Error in sendChatMessage coroutine", e)
+                addLog("Voice/Chat processing error: ${e.message}")
+                val fallbackReply = "Maaf kijiye, connect karne mein dikkat aayi. Kripya dobara try karein."
                 val assistantMsg = ChatMessage(
                     sender = MessageSender.ASSISTANT,
-                    text = reply
+                    text = fallbackReply
                 )
-                chatRepository.saveMessage(assistantMsg)
+                viewModelScope.launch { chatRepository.saveMessage(assistantMsg) }
                 _uiState.update {
-                    it.copy(isSendingChat = false)
+                    it.copy(
+                        isSendingChat = false,
+                        errorMessage = null,
+                        actionBanner = "Sam is Speaking...",
+                        state = AssistantState.SPEAKING
+                    )
                 }
-
                 if (_uiState.value.currentMode == AppMode.VOICE) {
-                    if (!audioBase64.isNullOrEmpty()) {
-                        audioPlayer?.enqueueChunk(audioBase64)
-                    } else {
-                        ttsEngine?.speakWithIndianAccent(reply)
-                    }
+                    speakMessage(fallbackReply)
+                } else {
+                    _uiState.update { it.copy(state = AssistantState.IDLE) }
                 }
             }
         }
@@ -1948,6 +2247,13 @@ $tempo beats per minute, fading out...
 
     fun speakMessage(text: String) {
         addLog("Speaking message via Android TextToSpeech: '${text.take(40)}...'")
+        _uiState.update {
+            it.copy(
+                state = AssistantState.SPEAKING,
+                actionBanner = "Sam is Speaking...",
+                errorMessage = null
+            )
+        }
         audioPlayer?.interrupt()
         ttsEngine?.speakWithIndianAccent(text)
     }

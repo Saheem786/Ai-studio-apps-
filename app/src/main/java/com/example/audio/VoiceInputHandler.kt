@@ -43,6 +43,19 @@ class VoiceInputHandler(
     private var isListening = false
     private var isDestroyed = false
     private var retryCount = 0
+    private var currentLanguage: AssistantLanguage = AssistantLanguage.HINGLISH
+
+    fun setLanguage(language: AssistantLanguage) {
+        val previous = currentLanguage
+        currentLanguage = language
+        onDiagnosticLog("Voice input language set to: ${language.displayName} (${language.speechLocale})")
+        if (isListening && previous != language) {
+            // Restart listening with updated language configuration
+            startListening()
+        }
+    }
+
+    fun getLanguage(): AssistantLanguage = currentLanguage
 
     private val recognitionListener = object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) {
@@ -84,6 +97,13 @@ class VoiceInputHandler(
             isListening = false
             onRmsAmplitudeChanged(0f)
 
+            // Suppress ERROR_CLIENT (Code 5) during state transitions or post-results cleanup
+            if (errorCode == SpeechRecognizer.ERROR_CLIENT) {
+                onDiagnosticLog("SpeechRecognizer ERROR_CLIENT (code 5) suppressed during state transition")
+                Log.w(TAG, "Suppressed ERROR_CLIENT (code 5) from SpeechRecognizer")
+                return
+            }
+
             // Auto-recovery for Error 11 (ERROR_SERVER_DISCONNECTED) and Error 8 (ERROR_RECOGNIZER_BUSY)
             if ((errorCode == SpeechRecognizer.ERROR_SERVER_DISCONNECTED || errorCode == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) && retryCount < 3 && !isDestroyed) {
                 retryCount++
@@ -96,16 +116,20 @@ class VoiceInputHandler(
                 return
             }
 
-            val isTimeout = (errorCode == SpeechRecognizer.ERROR_NO_MATCH || 
-                             errorCode == SpeechRecognizer.ERROR_SPEECH_TIMEOUT)
+            // Gently handle ERROR_NO_MATCH without alarming error messages
+            if (errorCode == SpeechRecognizer.ERROR_NO_MATCH) {
+                onDiagnosticLog("SpeechRecognizer: No match detected. Soft reset.")
+                onErrorOccurred("Listening...", true)
+                return
+            }
+
+            val isTimeout = errorCode == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
 
             val errorMsg = when (errorCode) {
                 SpeechRecognizer.ERROR_AUDIO -> "Audio recording error"
-                SpeechRecognizer.ERROR_CLIENT -> "Client side error"
                 SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Insufficient permissions for speech recognition"
                 SpeechRecognizer.ERROR_NETWORK -> "Network error during speech recognition"
                 SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network timeout during speech recognition"
-                SpeechRecognizer.ERROR_NO_MATCH -> "No speech match found"
                 SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Recognition service busy"
                 SpeechRecognizer.ERROR_SERVER -> "Server error"
                 SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Speech input timed out"
@@ -187,6 +211,14 @@ class VoiceInputHandler(
             }
 
             try {
+                if (isListening) {
+                    isListening = false
+                    try {
+                        speechRecognizer?.cancel()
+                    } catch (e: Exception) {
+                        Log.w(TAG, "SpeechRecognizer cancel before restart", e)
+                    }
+                }
                 speechRecognizer?.destroy()
                 speechRecognizer = null
 
@@ -207,14 +239,13 @@ class VoiceInputHandler(
                     }
                 }
 
+                val primaryLang = currentLanguage.speechLocale
                 val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                     putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
-                    val defaultLocale = java.util.Locale.getDefault().toLanguageTag()
-                    val primaryLang = if (defaultLocale.startsWith("hi", ignoreCase = true)) "hi-IN" else "en-IN"
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, primaryLang)
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, primaryLang)
-                    putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf("en-IN", "hi-IN", "en-US", "hi"))
+                    putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", currentLanguage.additionalLocales.toTypedArray())
                     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                     putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
                     putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
@@ -223,7 +254,7 @@ class VoiceInputHandler(
                 }
 
                 speechRecognizer?.startListening(intent)
-                onDiagnosticLog("SpeechRecognizer started listening (hi-IN / en-IN / Hinglish)")
+                onDiagnosticLog("SpeechRecognizer started listening (${currentLanguage.displayName} - $primaryLang)")
             } catch (e: SecurityException) {
                 Log.e(TAG, "Microphone permission denied for SpeechRecognizer", e)
                 onDiagnosticLog("SecurityException: Microphone permission not granted")
@@ -238,11 +269,13 @@ class VoiceInputHandler(
 
     fun stopListening() {
         runOnMain {
-            try {
+            if (isListening) {
                 isListening = false
-                speechRecognizer?.stopListening()
-            } catch (e: Exception) {
-                Log.e(TAG, "Error stopping SpeechRecognizer", e)
+                try {
+                    speechRecognizer?.stopListening()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error stopping SpeechRecognizer", e)
+                }
             }
             onRmsAmplitudeChanged(0f)
         }

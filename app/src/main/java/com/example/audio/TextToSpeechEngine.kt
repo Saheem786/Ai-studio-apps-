@@ -2,6 +2,8 @@ package com.example.audio
 
 import android.content.Context
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
@@ -43,11 +45,19 @@ class TextToSpeechEngine(
     private val isSpeaking = AtomicBoolean(false)
     private var amplitudeJob: Job? = null
     private var pendingSpeechText: String? = null
+    private var currentLanguage: AssistantLanguage = AssistantLanguage.HINGLISH
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    fun setLanguage(language: AssistantLanguage) {
+        currentLanguage = language
+        configureLocaleAndVoice()
+    }
 
     init {
-        scope.launch(Dispatchers.IO) {
+        mainHandler.post {
             try {
-                onDiagnosticLog("Initializing Android TextToSpeech engine asynchronously...")
+                onDiagnosticLog("Initializing Android TextToSpeech engine on Main thread...")
                 tts = TextToSpeech(context.applicationContext, this@TextToSpeechEngine)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to instantiate Android TextToSpeech", e)
@@ -81,29 +91,29 @@ class TextToSpeechEngine(
     private fun configureLocaleAndVoice() {
         val currentTts = tts ?: return
 
-        val indianLocale = Locale("en", "IN")
-        val result = currentTts.setLanguage(indianLocale)
+        val targetLocale = currentLanguage.ttsLocale
+        val result = currentTts.setLanguage(targetLocale)
         if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-            Log.w(TAG, "en-IN Locale not fully supported, falling back to US English locale detection")
+            Log.w(TAG, "${currentLanguage.displayName} Locale not fully supported, falling back to US English")
             currentTts.setLanguage(Locale.US)
         }
 
-        // Try to assign a high-quality Indian English or Hindi voice
+        // Try to assign a matching high-quality voice for the target language
         try {
-            val indianVoice = currentTts.voices?.firstOrNull { voice ->
-                (voice.locale.language == "en" && voice.locale.country == "IN") && !voice.isNetworkConnectionRequired
+            val matchedVoice = currentTts.voices?.firstOrNull { voice ->
+                voice.locale.language == currentLanguage.ttsLanguage && !voice.isNetworkConnectionRequired
             } ?: currentTts.voices?.firstOrNull { voice ->
-                voice.locale.language == "en" && voice.locale.country == "IN"
+                voice.locale.language == currentLanguage.ttsLanguage
             } ?: currentTts.voices?.firstOrNull { voice ->
-                voice.locale.language == "hi" && voice.locale.country == "IN"
+                voice.locale.language == "en"
             }
 
-            indianVoice?.let {
+            matchedVoice?.let {
                 currentTts.voice = it
-                onDiagnosticLog("Assigned high-quality Indian accent voice: ${it.name}")
+                onDiagnosticLog("Assigned TTS voice for ${currentLanguage.displayName}: ${it.name}")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to apply custom Indian voice to TTS", e)
+            Log.e(TAG, "Failed to apply voice for ${currentLanguage.displayName}", e)
         }
 
         currentTts.setPitch(1.0f)
@@ -177,6 +187,15 @@ class TextToSpeechEngine(
         if (!isInitialized.get()) {
             onDiagnosticLog("TTS not ready yet, queueing message: '${cleanText.take(30)}...'")
             pendingSpeechText = cleanText
+            // Watchdog fallback: if engine does not initialize within 2500ms, complete cycle so UI doesn't hang
+            scope.launch(Dispatchers.Main) {
+                delay(2500L)
+                if (!isInitialized.get() && pendingSpeechText != null) {
+                    onDiagnosticLog("TTS init timeout reached. Triggering speech completion fallback.")
+                    pendingSpeechText = null
+                    onSpeechEnded()
+                }
+            }
             return
         }
 
@@ -189,11 +208,17 @@ class TextToSpeechEngine(
             if (result == TextToSpeech.SUCCESS) {
                 onDiagnosticLog("TTS queued utterance: '${cleanText.take(40)}...'")
             } else {
-                onDiagnosticLog("TTS speak call returned status: $result")
+                onDiagnosticLog("TTS speak call returned status: $result (fallback end)")
+                scope.launch(Dispatchers.Main) {
+                    onSpeechEnded()
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error invoking TextToSpeech.speak", e)
             onDiagnosticLog("TTS speak error: ${e.message}")
+            scope.launch(Dispatchers.Main) {
+                onSpeechEnded()
+            }
         }
     }
 

@@ -221,7 +221,10 @@ fun SamScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // Assistant State Badge
-                AssistantStatusBadge(state = uiState.state)
+                AssistantStatusBadge(
+                    state = uiState.state,
+                    language = uiState.selectedLanguage
+                )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -453,6 +456,8 @@ fun SamScreen(
         SettingsDialog(
             currentApiKey = uiState.apiKey,
             currentSelectedModel = uiState.selectedModel,
+            selectedLanguage = uiState.selectedLanguage,
+            onLanguageSelected = { lang -> viewModel.setLanguage(lang) },
             voiceMatchEnforced = uiState.voiceMatchEnforced,
             onVoiceMatchEnforcedChanged = { enabled -> viewModel.toggleVoiceMatchEnforced(enabled) },
             isVoiceCalibrationCompleted = uiState.isVoiceCalibrationCompleted,
@@ -475,7 +480,7 @@ fun SamScreen(
                 viewModel.toggleSettingsDialog(false)
                 viewModel.toggleHelpCommandsScreen(true)
             },
-            onSaveSettings = { newKey, newModel -> viewModel.updateSettings(newKey, newModel) },
+            onSaveSettings = { newKey, newModel, newLanguage -> viewModel.updateSettings(newKey, newModel, newLanguage) },
             onSaveKey = { newKey -> viewModel.updateApiKey(newKey) },
             onDismiss = { viewModel.toggleSettingsDialog(false) }
         )

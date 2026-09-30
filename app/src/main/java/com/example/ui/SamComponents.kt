@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Person
@@ -55,6 +56,8 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Translate
+import com.example.audio.AssistantLanguage
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -228,6 +231,7 @@ fun SamTopBar(
 @Composable
 fun AssistantStatusBadge(
     state: AssistantState,
+    language: AssistantLanguage? = null,
     modifier: Modifier = Modifier
 ) {
     val (label, color, bgColor) = when (state) {
@@ -261,6 +265,18 @@ fun AssistantStatusBadge(
                 color = color,
                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
             )
+            if (language != null) {
+                Text(
+                    text = "•",
+                    color = SamTextMuted,
+                    fontSize = 11.sp
+                )
+                Text(
+                    text = "${language.flag} ${language.displayName}",
+                    color = SamCyan,
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium)
+                )
+            }
         }
     }
 }
@@ -598,6 +614,8 @@ fun MultipleContactsDialog(
 fun SettingsDialog(
     currentApiKey: String,
     currentSelectedModel: String = "gemini-3.8-flash",
+    selectedLanguage: AssistantLanguage = AssistantLanguage.HINGLISH,
+    onLanguageSelected: (AssistantLanguage) -> Unit = {},
     voiceMatchEnforced: Boolean,
     onVoiceMatchEnforcedChanged: (Boolean) -> Unit,
     isVoiceCalibrationCompleted: Boolean,
@@ -611,11 +629,12 @@ fun SettingsDialog(
     onThemeAccentChanged: (AppThemeAccent) -> Unit,
     onOpenFullThemeSettings: () -> Unit,
     onOpenHelp: () -> Unit = {},
-    onSaveSettings: (apiKey: String, selectedModel: String) -> Unit = { _, _ -> },
+    onSaveSettings: (apiKey: String, selectedModel: String, language: AssistantLanguage) -> Unit = { _, _, _ -> },
     onSaveKey: (String) -> Unit = {},
     onDismiss: () -> Unit
 ) {
     var apiKeyText by remember { mutableStateOf(currentApiKey) }
+    var currentLanguageSelection by remember(selectedLanguage) { mutableStateOf(selectedLanguage) }
     val standardModels = listOf(
         "Autonomous Smart Routing",
         "gemini-3.8-flash",
@@ -819,6 +838,84 @@ fun SettingsDialog(
                             .fillMaxWidth()
                             .testTag("custom_model_input")
                     )
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // Voice & Speech Recognition Language Toggle Section
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Voice & Speech Language",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = SamCyan
+                        )
+                    )
+                    Text(
+                        text = "${currentLanguageSelection.flag} ${currentLanguageSelection.displayName}",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = SamMagenta
+                        )
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Configures SpeechRecognizer & vocal engine for seamless multilingual conversation.",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 11.sp,
+                        color = SamTextMuted
+                    )
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    AssistantLanguage.values().forEach { lang ->
+                        val isSelected = currentLanguageSelection == lang
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                currentLanguageSelection = lang
+                                onLanguageSelected(lang)
+                            },
+                            label = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(text = lang.flag, fontSize = 12.sp)
+                                    Text(
+                                        text = lang.displayName,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                }
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = SamSurface,
+                                labelColor = SamTextSecondary,
+                                selectedContainerColor = SamCyan.copy(alpha = 0.25f),
+                                selectedLabelColor = SamCyan
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = isSelected,
+                                borderColor = SamSurfaceBorder,
+                                selectedBorderColor = SamCyan,
+                                borderWidth = if (isSelected) 1.5.dp else 1.dp
+                            ),
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.testTag("language_chip_${lang.code}")
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(18.dp))
@@ -1194,8 +1291,9 @@ fun SettingsDialog(
                     } else {
                         selectedModelText.trim()
                     }
-                    onSaveSettings(apiKeyText, finalModel)
+                    onSaveSettings(apiKeyText, finalModel, currentLanguageSelection)
                     onSaveKey(apiKeyText)
+                    onLanguageSelected(currentLanguageSelection)
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = SamPurplePrimary),
                 modifier = Modifier.testTag("save_settings_button")

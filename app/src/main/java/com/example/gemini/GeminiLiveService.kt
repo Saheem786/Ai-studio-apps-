@@ -496,12 +496,10 @@ class GeminiLiveService(
             if (!routedModel.isNullOrBlank()) {
                 add(routedModel)
             }
-            if (!contains("gemini-3.5-flash")) add("gemini-3.5-flash")
-            if (!contains("gemini-2.5-flash")) add("gemini-2.5-flash")
-            if (!contains("gemini-1.5-flash")) add("gemini-1.5-flash")
             if (!contains("gemini-3.8-flash")) add("gemini-3.8-flash")
-            if (!contains("gemini-3.7-flash")) add("gemini-3.7-flash")
             if (!contains("gemini-3.1-pro-preview")) add("gemini-3.1-pro-preview")
+            if (!contains("gemini-1.5-flash")) add("gemini-1.5-flash")
+            if (!contains("gemini-2.0-flash")) add("gemini-2.0-flash")
         }
         var response: Response? = null
         var lastErrorCode = 200

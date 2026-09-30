@@ -74,4 +74,21 @@ class ExampleRobolectricTest {
         val whatsappSuccess = manager.launchApp("WhatsApp")
         org.junit.Assert.assertTrue(whatsappSuccess)
     }
+
+    @Test
+    fun `verify assistant language enum and dynamic speech configuration`() {
+        val hinglish = com.example.audio.AssistantLanguage.HINGLISH
+        assertEquals("hi-IN", hinglish.speechLocale)
+        assertEquals("hinglish", hinglish.code)
+        org.junit.Assert.assertTrue(hinglish.additionalLocales.contains("en-IN"))
+
+        val englishUs = com.example.audio.AssistantLanguage.ENGLISH_US
+        assertEquals("en-US", englishUs.speechLocale)
+
+        val hindi = com.example.audio.AssistantLanguage.HINDI
+        assertEquals("hi-IN", hindi.speechLocale)
+
+        val resolved = com.example.audio.AssistantLanguage.fromCode("es_es")
+        assertEquals(com.example.audio.AssistantLanguage.SPANISH, resolved)
+    }
 }

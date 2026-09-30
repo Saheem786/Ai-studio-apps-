@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Help
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.AppShortcut
@@ -141,6 +142,22 @@ private val SAMPLE_VOICE_COMMANDS = listOf(
         description = "Queries contacts list and presents phone details or direct dial.",
         icon = Icons.Default.Search
     ),
+    VoiceCommandItem(
+        id = "send_sms_rahul",
+        category = CommandCategory.CALLS,
+        command = "Send SMS to Rahul I am on my way",
+        alternateHindi = "Rahul ko SMS bhejo main raste mein hoon",
+        description = "Opens SMS composer with recipient and message pre-populated.",
+        icon = Icons.AutoMirrored.Filled.Send
+    ),
+    VoiceCommandItem(
+        id = "send_sms_number",
+        category = CommandCategory.CALLS,
+        command = "Send SMS to 9876543210 Hello Arushi",
+        alternateHindi = "9876543210 ko SMS bhejo Hello",
+        description = "Directly initiates SMS composer for phone number.",
+        icon = Icons.AutoMirrored.Filled.Send
+    ),
 
     // Timers & Alarms
     VoiceCommandItem(
@@ -183,7 +200,7 @@ private val SAMPLE_VOICE_COMMANDS = listOf(
         command = "Send WhatsApp message to Mom: Main ghar aa raha hoon",
         alternateHindi = "WhatsApp par Mom ko message bhejo",
         description = "Pre-populates a WhatsApp chat with target recipient and message text.",
-        icon = Icons.Default.Send
+        icon = Icons.AutoMirrored.Filled.Send
     ),
     VoiceCommandItem(
         id = "open_yt",
@@ -242,6 +259,22 @@ private val SAMPLE_VOICE_COMMANDS = listOf(
         alternateHindi = "Battery kitni percent bachi hai?",
         description = "Checks battery percentage and charging status.",
         icon = Icons.Default.FlashlightOn
+    ),
+    VoiceCommandItem(
+        id = "wifi_on",
+        category = CommandCategory.DEVICE,
+        command = "Turn on Wi-Fi",
+        alternateHindi = "Wi-Fi on karo",
+        description = "Opens system quick panel to turn Wi-Fi ON.",
+        icon = Icons.Default.AppShortcut
+    ),
+    VoiceCommandItem(
+        id = "wifi_off",
+        category = CommandCategory.DEVICE,
+        command = "Turn off Wi-Fi",
+        alternateHindi = "Wi-Fi band karo",
+        description = "Opens system quick panel to turn Wi-Fi OFF.",
+        icon = Icons.Default.AppShortcut
     ),
 
     // AI & Search
