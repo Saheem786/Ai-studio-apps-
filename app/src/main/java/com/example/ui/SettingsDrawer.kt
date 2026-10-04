@@ -509,7 +509,7 @@ fun SettingsDrawerSheet(
                             modifier = Modifier.size(20.dp)
                         )
                         Text(
-                            text = "Sam's Voice Persona",
+                            text = "JARVIS's Voice Persona",
                             style = MaterialTheme.typography.titleSmall.copy(
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White

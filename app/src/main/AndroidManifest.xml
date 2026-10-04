@@ -58,10 +58,10 @@
             android:name=".ui.JarvisFloatingWidgetService"
             android:exported="false" />
 
-        <!-- Sam Notification Reader Service -->
+        <!-- JARVIS Notification Reader Service -->
         <service
             android:name=".system.SamNotificationListener"
-            android:label="Sam Notification Reader"
+            android:label="JARVIS Notification Reader"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
             android:exported="true">
             <intent-filter>
@@ -69,11 +69,11 @@
             </intent-filter>
         </service>
 
-        <!-- Sam Screen Context Accessibility Service -->
+        <!-- JARVIS Screen Context Accessibility Service -->
         <service
             android:name=".system.SamScreenContextService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:label="Sam Screen Reader &amp; Vision"
+            android:label="JARVIS Screen Reader &amp; Vision"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />

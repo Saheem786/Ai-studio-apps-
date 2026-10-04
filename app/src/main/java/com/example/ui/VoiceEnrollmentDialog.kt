@@ -58,7 +58,7 @@ fun VoiceEnrollmentDialog(
     )
 
     val stepPrompts = listOf(
-        "Say: 'Hey Sam, wake up'",
+        "Say: 'Hey Jarvis, wake up'",
         "Say: 'Turn on the flashlight'",
         "Say: 'Verify my voiceprint'"
     )

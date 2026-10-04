@@ -166,7 +166,7 @@ When user asks to open an app, adjust device settings, generate photos, or take 
                 textAlign = android.graphics.Paint.Align.CENTER
                 setShadowLayer(16f, 0f, 4f, android.graphics.Color.BLACK)
             }
-            canvas.drawText("✨ SAM AI IMAGEN 3 ✨", width / 2f, height / 2f - 30f, textPaint)
+            canvas.drawText("✨ JARVIS AI IMAGEN 3 ✨", width / 2f, height / 2f - 30f, textPaint)
 
             textPaint.textSize = 32f
             textPaint.color = android.graphics.Color.argb(230, 255, 255, 255)
@@ -182,6 +182,6 @@ When user asks to open an app, adjust device settings, generate photos, or take 
     }
 
     fun getFallbackImageBase64(): String {
-        return createVibrantArtFallbackBase64("Sam AI Concept Visual")
+        return createVibrantArtFallbackBase64("JARVIS AI Concept Visual")
     }
 }

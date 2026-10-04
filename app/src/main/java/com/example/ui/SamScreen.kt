@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -602,7 +603,7 @@ fun SamScreen(
                         AlertDialog(
                             onDismissRequest = { showVoiceImageSourceDialog = false },
                             title = { Text("Attach Image") },
-                            text = { Text("Capture or select a photo to ask Sam:") },
+                            text = { Text("Capture or select a photo to ask JARVIS:") },
                             confirmButton = {
                                 TextButton(
                                     onClick = {
@@ -706,7 +707,7 @@ fun SamScreen(
                                 else -> {
                                     Icon(
                                         imageVector = Icons.Default.PowerSettingsNew,
-                                        contentDescription = "Start Sam",
+                                        contentDescription = "Start JARVIS",
                                         tint = Color.White,
                                         modifier = Modifier.size(34.dp)
                                     )
@@ -735,7 +736,7 @@ fun SamScreen(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 Text(
-                    text = if (uiState.isMicActive) "Tap to pause or stop Sam" else "Tap to activate Sam",
+                    text = if (uiState.isMicActive) "Tap to pause or stop JARVIS" else "Tap to activate JARVIS",
                     style = MaterialTheme.typography.bodySmall.copy(
                         color = SamTextMuted,
                         fontSize = 12.sp
@@ -893,7 +894,7 @@ fun SamScreen(
                         viewModel.executeDeviceTool("set_alarm", mapOf("hour" to 7, "minute" to 0, "label" to "Morning Alarm"))
                     }
                     "Send SMS" -> {
-                        viewModel.executeDeviceTool("send_sms", mapOf("message" to "Hello from Sam AI!"))
+                        viewModel.executeDeviceTool("send_sms", mapOf("message" to "Hello from JARVIS AI!"))
                     }
                     "Toggle Wi-Fi" -> {
                         viewModel.executeDeviceTool("toggle_wifi", emptyMap<String, Any?>())
@@ -956,6 +957,185 @@ fun SamScreen(
         MicrophonePermissionDialog(
             permissionState = micPermissionState,
             onDismiss = { showMicPermissionDialog = false }
+        )
+    }
+
+    // JARVIS Secure Confirmation Dialog
+    uiState.pendingConfirmationCall?.let { pending ->
+        AlertDialog(
+            onDismissRequest = { viewModel.confirmPendingAction(false) },
+            containerColor = com.example.ui.theme.SamSurfaceElevated,
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Security Alert",
+                        tint = com.example.ui.theme.SamCyanGlow,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Text(
+                        text = "Secure Authorization Gate",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = com.example.ui.theme.SamTextPrimary
+                        )
+                    )
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = pending.promptMessage,
+                        style = MaterialTheme.typography.bodyMedium.copy(color = com.example.ui.theme.SamTextPrimary)
+                    )
+                    Text(
+                        text = "This action requires manual confirmation to execute. Do you authorize this on-device operation, Sir?",
+                        style = MaterialTheme.typography.bodySmall.copy(color = com.example.ui.theme.SamTextSecondary)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { viewModel.confirmPendingAction(true) },
+                    colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                        contentColor = com.example.ui.theme.SamCyanGlow
+                    )
+                ) {
+                    Text("Authorize", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { viewModel.confirmPendingAction(false) },
+                    colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                        contentColor = com.example.ui.theme.SamTextSecondary
+                    )
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // JARVIS Secure Action Pipeline Overlay
+    AnimatedVisibility(
+        visible = uiState.showPipelineOverlay,
+        enter = fadeIn(),
+        exit = fadeOut()
+    ) {
+        AlertDialog(
+            onDismissRequest = { /* Force view of pipeline */ },
+            containerColor = com.example.ui.theme.SamSurface,
+            modifier = Modifier.border(1.5.dp, com.example.ui.theme.SamCyan.copy(alpha = 0.5f), shape = RoundedCornerShape(28.dp)),
+            title = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(com.example.ui.theme.SamCyanGlow)
+                        )
+                        Text(
+                            text = "JARVIS SECURE ACTION PIPELINE",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp,
+                                color = com.example.ui.theme.SamCyanGlow
+                            )
+                        )
+                    }
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = com.example.ui.theme.SamCyanGlow
+                    )
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 300.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    uiState.actionPipelineStages.forEachIndexed { index, stage ->
+                        val stageColor = when (stage.status) {
+                            "SUCCESS" -> com.example.ui.theme.SamSuccessGreen
+                            "FAILED" -> com.example.ui.theme.SamErrorRed
+                            else -> com.example.ui.theme.SamCyanGlow
+                        }
+                        
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    if (stage.status == "ACTIVE") com.example.ui.theme.SamSurfaceElevated 
+                                    else Color.Transparent, 
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                  .padding(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            // Stage index bullet or loading spinner
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .background(stageColor.copy(alpha = 0.15f))
+                                    .border(1.dp, stageColor, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (stage.status == "ACTIVE") {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(12.dp),
+                                        strokeWidth = 1.5.dp,
+                                        color = stageColor
+                                    )
+                                } else {
+                                    Text(
+                                        text = "${index + 1}",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            color = stageColor,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    )
+                                }
+                            }
+                            
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stage.stageName,
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = stageColor
+                                    )
+                                )
+                                Text(
+                                    text = stage.description,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        color = com.example.ui.theme.SamTextPrimary,
+                                        fontSize = 11.sp
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {}
         )
     }
     }

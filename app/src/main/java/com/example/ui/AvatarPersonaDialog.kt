@@ -55,9 +55,9 @@ fun AvatarPersonaDialog(
 ) {
     val personas = remember {
         listOf(
-            PersonaOption("SAM", "Classic Sam", "Witty, playful, and emotionally responsive assistant (Default)"),
-            PersonaOption("JARVIS", "Jarvis (British)", "Crisp, elegant, formal & highly sophisticated British AI"),
-            PersonaOption("CYBERPUNK", "Cyberpunk Rebel", "Dry, direct, street-smart rebel assistant"),
+            PersonaOption("JARVIS", "Classic JARVIS", "Crisp, elegant, formal & highly sophisticated British AI (Default)"),
+            PersonaOption("SAM", "Casual Sam", "Witty, playful, extremely friendly, and conversational buddy"),
+            PersonaOption("CYBERPUNK", "Cyberpunk Rebel", "Dry, direct, street-smart rebel cybernetic assistant"),
             PersonaOption("BUDDY", "Buddy (Hinglish)", "Warm, extremely casual, friendly Hinglish roomie vibes")
         )
     }
@@ -81,7 +81,7 @@ fun AvatarPersonaDialog(
                 )
                 Column {
                     Text(
-                        text = "Sam Persona Studio",
+                        text = "JARVIS Persona Studio",
                         style = MaterialTheme.typography.titleMedium.copy(
                             fontWeight = FontWeight.Bold,
                             color = SamTextPrimary

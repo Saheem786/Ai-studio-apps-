@@ -379,7 +379,7 @@ fun QuickActionChips(
     modifier: Modifier = Modifier
 ) {
     val prompts = listOf(
-        "👋 Hello Sam",
+        "👋 Hello JARVIS",
         "💬 WhatsApp kholo",
         "▶️ Open YouTube",
         "📞 Call Mom",
@@ -522,7 +522,7 @@ fun DiagnosticsBottomSheet(
                 if (logs.isEmpty()) {
                     Box(modifier = Modifier.padding(24.dp), contentAlignment = Alignment.Center) {
                         Text(
-                            text = "No diagnostic events yet. Start talking to Sam to record live events.",
+                            text = "No diagnostic events yet. Start talking to JARVIS to record live events.",
                             color = SamTextMuted,
                             textAlign = TextAlign.Center,
                             style = MaterialTheme.typography.bodySmall
@@ -581,7 +581,7 @@ fun MultipleContactsDialog(
         text = {
             Column {
                 Text(
-                    text = "Sam found several contacts matching your request. Which one would you like to call?",
+                    text = "JARVIS found several contacts matching your request. Which one would you like to call?",
                     style = MaterialTheme.typography.bodySmall.copy(color = SamTextSecondary)
                 )
                 Spacer(modifier = Modifier.height(12.dp))
@@ -1215,7 +1215,7 @@ fun SettingsDialog(
                             )
                         )
                         Text(
-                            text = "Access Sam overlay listening anywhere instantly",
+                            text = "Access JARVIS overlay listening anywhere instantly",
                             style = MaterialTheme.typography.bodySmall.copy(
                                 fontSize = 11.sp,
                                 color = SamTextMuted

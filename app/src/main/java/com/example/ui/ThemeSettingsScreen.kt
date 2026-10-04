@@ -177,7 +177,7 @@ fun ThemeSettingsScreen(
                                 .padding(horizontal = 12.dp, vertical = 8.dp)
                         ) {
                             Text(
-                                text = "Hey Sam, show me Neon colors!",
+                                text = "Hey JARVIS, show me Neon colors!",
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     color = SamDarkBg,
                                     fontWeight = FontWeight.Bold
@@ -222,7 +222,7 @@ fun ThemeSettingsScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Sam is Ready",
+                                text = "JARVIS is Ready",
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     color = currentAccent.glow,
                                     fontWeight = FontWeight.Bold

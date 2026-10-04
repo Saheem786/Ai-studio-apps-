@@ -161,7 +161,7 @@ fun GeminiAdvancedToolsSheet(
                 Triple("Toggle Wi-Fi", Icons.Default.Wifi, "Control device Wi-Fi and network connectivity"),
                 Triple("Canvas", Icons.Default.Palette, "Open code/document interactive workspace"),
                 Triple("Deep Research", Icons.Default.Search, "Toggle deep search grounding tools"),
-                Triple("Guided Learning", Icons.Default.School, "Get structured explanations from Sam")
+                Triple("Guided Learning", Icons.Default.School, "Get structured explanations from JARVIS")
             )
 
             LazyColumn(
@@ -249,7 +249,7 @@ fun GeminiAdvancedToolsSheet(
                                     )
                                 )
                                 Text(
-                                    text = "Allow Sam to adapt to your style and memory",
+                                    text = "Allow JARVIS to adapt to your style and memory",
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         color = SamTextMuted,
                                         fontSize = 11.sp

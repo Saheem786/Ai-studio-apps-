@@ -323,7 +323,7 @@ private val SAMPLE_VOICE_COMMANDS = listOf(
         category = CommandCategory.PERSONAS,
         command = "Switch to Jarvis persona",
         alternateHindi = "Jarvis mode chalu karo",
-        description = "Transforms Sam into a sophisticated British AI butler.",
+        description = "Transforms JARVIS into a sophisticated British AI butler.",
         icon = Icons.Default.Language
     ),
     VoiceCommandItem(
@@ -331,7 +331,7 @@ private val SAMPLE_VOICE_COMMANDS = listOf(
         category = CommandCategory.PERSONAS,
         command = "Switch to Buddy persona",
         alternateHindi = "Buddy mode lagao",
-        description = "Transforms Sam into a friendly Hinglish college roommate.",
+        description = "Transforms JARVIS into a friendly Hinglish college roommate.",
         icon = Icons.Default.Language
     ),
     VoiceCommandItem(
@@ -385,7 +385,7 @@ fun HelpCommandsScreen(
                             )
                         )
                         Text(
-                            text = "Examples you can speak or type to Sam",
+                            text = "Examples you can speak or type to JARVIS",
                             style = MaterialTheme.typography.bodySmall.copy(
                                 color = SamPurpleSecondary,
                                 fontSize = 11.sp
@@ -571,7 +571,7 @@ fun HelpCommandsScreen(
                         Text(
                             text = "• Speak naturally in Hindi, English, or Hinglish.\n" +
                                     "• Say direct action words like 'Open WhatsApp', 'Call Mom', or 'Set a timer for 10 minutes'.\n" +
-                                    "• Tap any command card below to try it immediately with Sam!",
+                                    "• Tap any command card below to try it immediately with JARVIS!",
                             style = MaterialTheme.typography.bodySmall.copy(
                                 color = SamTextSecondary,
                                 fontSize = 12.sp,

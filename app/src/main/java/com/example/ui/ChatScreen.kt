@@ -127,7 +127,7 @@ fun ChatScreenView(
         AlertDialog(
             onDismissRequest = { showImageSourceDialog = false },
             title = { Text("Attach Image") },
-            text = { Text("Choose an option to capture or select an image for Sam:") },
+            text = { Text("Choose an option to capture or select an image for JARVIS:") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -278,7 +278,7 @@ fun ChatScreenView(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Conversation with Sam",
+                    text = "Conversation with JARVIS",
                     style = MaterialTheme.typography.bodySmall.copy(
                         color = SamTextMuted,
                         fontWeight = FontWeight.Medium
@@ -523,7 +523,7 @@ fun ChatScreenView(
                             onValueChange = onInputChanged,
                             placeholder = {
                                 Text(
-                                    text = "Message Sam...",
+                                    text = "Message JARVIS...",
                                     color = SamTextMuted,
                                     style = MaterialTheme.typography.bodyMedium
                                 )
@@ -617,7 +617,7 @@ fun ChatScreenView(
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
                                         imageVector = Icons.Default.SmartToy,
-                                        contentDescription = "Sam",
+                                        contentDescription = "JARVIS",
                                         tint = SamCyanGlow,
                                         modifier = Modifier.size(18.dp)
                                     )
