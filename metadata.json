@@ -1,6 +1,6 @@
 {
-  "name": "Sam Ai",
-  "description": "Sam Ai Voice Assistant - Real-time conversational voice assistant with natural multi-language speech, device actions, and contacts calling.",
+  "name": "JARVIS AI",
+  "description": "JARVIS AI Voice Assistant - Real-time conversational voice assistant with natural multi-language speech, device actions, and contacts calling.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

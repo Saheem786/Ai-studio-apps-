@@ -46,8 +46,8 @@ class JarvisFloatingWidgetService : Service() {
         }
 
         val notification: Notification = NotificationCompat.Builder(this, channelId)
-            .setContentTitle("Sam AI Jarvis Orb")
-            .setContentText("Tap the floating orb to interact with Sam.")
+            .setContentTitle("JARVIS AI Floating Orb")
+            .setContentText("Tap the floating orb to interact with JARVIS.")
             .setSmallIcon(android.R.drawable.presence_online)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()

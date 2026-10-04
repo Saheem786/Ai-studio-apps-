@@ -52,7 +52,7 @@ enum class AssistantState {
 data class SamUiState(
     val state: AssistantState = AssistantState.IDLE,
     val amplitude: Float = 0f,
-    val transcript: String = "Tap the microphone to start talking to Sam",
+    val transcript: String = "Tap the microphone to start talking to JARVIS",
     val actionBanner: String? = null,
     val errorMessage: String? = null,
     val diagnosticLogs: List<String> = emptyList(),
@@ -66,7 +66,7 @@ data class SamUiState(
     val chatMessages: List<ChatMessage> = listOf(
         ChatMessage(
             sender = MessageSender.ASSISTANT,
-            text = "Hey! Sam here. Kaho yaar, kya chal raha hai? Kuch sunna hai, phone pe koi kaam karwana hai, ya bas baat karni hai?"
+            text = "System online. I am JARVIS, your personal Artificial Intelligence assistant. How may I be of service, Sir?"
         )
     ),
     val inputText: String = "",
@@ -85,7 +85,7 @@ data class SamUiState(
     val isVoiceCalibrationCompleted: Boolean = false,
     val showVoiceEnrollmentDialog: Boolean = false,
     val floatingWidgetEnabled: Boolean = false,
-    val themeAccent: AppThemeAccent = AppThemeAccent.CLASSIC,
+    val themeAccent: AppThemeAccent = AppThemeAccent.NEON_BLUE,
     val showThemeSettings: Boolean = false,
     val showHelpCommandsScreen: Boolean = false,
     val selectedVideoDuration: String? = null,
@@ -93,11 +93,11 @@ data class SamUiState(
     val isVideoGenActive: Boolean = false,
     val showVideoDurationDialog: Boolean = false,
     val showAvatarPersonaDialog: Boolean = false,
-    val currentPersona: String = "SAM",
+    val currentPersona: String = "JARVIS",
     val showMusicStudioDialog: Boolean = false,
     val wakeWordEnabled: Boolean = false,
-    val wakeWordOption: com.example.audio.WakeWordOption = com.example.audio.WakeWordOption.HEY_ARUSHI,
-    val selectedLanguage: AssistantLanguage = AssistantLanguage.HINGLISH,
+    val wakeWordOption: com.example.audio.WakeWordOption = com.example.audio.WakeWordOption.HEY_JARVIS,
+    val selectedLanguage: AssistantLanguage = AssistantLanguage.ENGLISH_US,
     val engineMode: AiEngineMode = AiEngineMode.QUICK,
     val showSettingsDrawer: Boolean = false,
     val ttsVoiceStyle: String = "FEMALE"
@@ -166,7 +166,7 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                         listOf(
                             ChatMessage(
                                 sender = MessageSender.ASSISTANT,
-                                text = "Hello! Main Sam hoon. Aap mujhse bol kar ya text chat mein kuch bhi pooch sakte hain aur device actions (WhatsApp, Call, YouTube, etc.) chala sakte hain."
+                                text = "Welcome back, Sir. I am JARVIS. Fully integrated and ready to assist you. Ask me anything or command device operations at your leisure."
                             )
                         )
                     } else {
@@ -210,27 +210,27 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
         val isEnforced = prefs.getBoolean("voice_match_enforced", false)
         val isFloatingWidgetOn = prefs.getBoolean("floating_widget_enabled", false)
         val isWakeWordOn = prefs.getBoolean("wake_word_enabled", false)
-        val savedPersona = prefs.getString("current_persona", "SAM") ?: "SAM"
+        val savedPersona = prefs.getString("current_persona", "JARVIS") ?: "JARVIS"
         var savedModel = prefs.getString("selected_gemini_model", "gemini-3.8-flash")?.trim() ?: "gemini-3.8-flash"
         if (savedModel == "gemini-1.5-flash" || savedModel == "gemini-2.0-flash" || savedModel == "gemini-1.5-pro") {
             savedModel = "gemini-3.8-flash"
             prefs.edit().putString("selected_gemini_model", savedModel).apply()
         }
 
-        val savedThemeStr = prefs.getString("theme_accent", "CLASSIC") ?: "CLASSIC"
+        val savedThemeStr = prefs.getString("theme_accent", "NEON_BLUE") ?: "NEON_BLUE"
         val themeAccent = try {
             AppThemeAccent.valueOf(savedThemeStr)
         } catch (e: Exception) {
-            AppThemeAccent.CLASSIC
+            AppThemeAccent.NEON_BLUE
         }
 
-        val savedLangCode = prefs.getString("selected_speech_language", AssistantLanguage.HINGLISH.code)
+        val savedLangCode = prefs.getString("selected_speech_language", AssistantLanguage.ENGLISH_US.code)
         val initialLanguage = AssistantLanguage.fromCode(savedLangCode)
 
         val savedEngineModeStr = prefs.getString("ai_engine_mode", "QUICK")
         val initialEngineMode = AiEngineMode.fromName(savedEngineModeStr)
 
-        val savedWakeWordKey = prefs.getString("wake_word_option", com.example.audio.WakeWordOption.HEY_ARUSHI.key)
+        val savedWakeWordKey = prefs.getString("wake_word_option", com.example.audio.WakeWordOption.HEY_JARVIS.key)
         val initialWakeWordOption = com.example.audio.WakeWordOption.fromKey(savedWakeWordKey)
 
         val savedVoiceStyle = prefs.getString("tts_voice_style", "FEMALE") ?: "FEMALE"
@@ -414,7 +414,7 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                         it.copy(
                             state = AssistantState.LISTENING,
                             amplitude = 0f,
-                            actionBanner = "Sam is listening..."
+                            actionBanner = "JARVIS is listening..."
                         )
                     }
                     voiceInputHandler?.startListening()
@@ -452,7 +452,7 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                         it.copy(
                             state = AssistantState.LISTENING,
                             amplitude = 0f,
-                            actionBanner = "Sam is listening..."
+                            actionBanner = "JARVIS is listening..."
                         )
                     }
                     voiceInputHandler?.startListening()
@@ -481,7 +481,7 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                         shouldStream = false
                         _uiState.update { it.copy(actionBanner = "Voice Mismatch: Unauthorized speaker") }
                     } else {
-                        _uiState.update { it.copy(actionBanner = "Sam is listening...") }
+                        _uiState.update { it.copy(actionBanner = "JARVIS is listening...") }
                     }
                 }
                 if (shouldStream) {
@@ -515,7 +515,7 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
                         state = AssistantState.LISTENING,
                         isMicActive = true,
                         errorMessage = null,
-                        actionBanner = "Sam is listening..."
+                        actionBanner = "JARVIS is listening..."
                     )
                 }
                 micRecorder?.start(viewModelScope)
@@ -1239,7 +1239,7 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
         val listeningBanner = if (!detectedKeyword.isNullOrBlank()) {
             "Heard '$detectedKeyword'! Listening..."
         } else {
-            "Sam is listening..."
+            "JARVIS is listening..."
         }
         val transcriptMsg = if (!detectedKeyword.isNullOrBlank()) {
             "Heard '$detectedKeyword' 🎙️"
@@ -1302,7 +1302,7 @@ class SamViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update {
             it.copy(
                 state = AssistantState.THINKING,
-                actionBanner = "Sam is thinking...",
+                actionBanner = "JARVIS is thinking...",
                 errorMessage = null,
                 transcript = "You: $trimmed",
                 amplitude = 0f
@@ -2296,6 +2296,32 @@ $tempo beats per minute, fading out...
             return
         }
 
+        // Media/Song Playback Intercept Guard
+        if (com.example.system.MediaActionHandler.isMediaRequest(correctedText)) {
+            val songQuery = com.example.system.MediaActionHandler.extractQuery(correctedText)
+            if (songQuery.isNotBlank()) {
+                val actionResult = com.example.system.MediaActionHandler.playOnYouTube(getApplication(), songQuery)
+                if (actionResult) {
+                    val msg = "Haan yaar, abhi play karta hoon: '$songQuery' on YouTube! 🎧"
+                    val actionMsg = ChatMessage(
+                        sender = MessageSender.ASSISTANT,
+                        text = "▶️ **PLAYING ON YOUTUBE**\n\n$msg",
+                        isAction = true,
+                        actionName = "play_youtube",
+                        actionDetail = songQuery
+                    )
+                    viewModelScope.launch {
+                        chatRepository.saveMessage(actionMsg)
+                    }
+                    if (_uiState.value.currentMode == AppMode.VOICE) {
+                        ttsEngine?.speak(msg)
+                    }
+                    _uiState.update { it.copy(actionBanner = msg, isSendingChat = false, state = AssistantState.IDLE) }
+                    return
+                }
+            }
+        }
+
         val isScreenQuery = lowerText.contains("screen dekho") || 
                             lowerText.contains("read screen") || 
                             lowerText.contains("kya likha hai") || 
@@ -2582,9 +2608,9 @@ $tempo beats per minute, fading out...
             try {
                 val activeEngineMode = _uiState.value.engineMode
                 val thinkingBanner = if (activeEngineMode == AiEngineMode.DEEP_THINK) {
-                    "🧠 Sam is deeply reasoning (Gemini 3.1 Pro)..."
+                    "🧠 JARVIS is deeply reasoning (Gemini 3.1 Pro)..."
                 } else {
-                    "⚡ Sam is thinking (Gemini 3.8 Flash)..."
+                    "⚡ JARVIS is thinking (Gemini 3.8 Flash)..."
                 }
 
                 _uiState.update {
@@ -2637,7 +2663,7 @@ $tempo beats per minute, fading out...
                                 _uiState.update {
                                     it.copy(
                                         isSendingChat = false,
-                                        actionBanner = "Sam is Speaking...",
+                                        actionBanner = "JARVIS is Speaking...",
                                         state = AssistantState.SPEAKING
                                     )
                                 }
@@ -2672,7 +2698,7 @@ $tempo beats per minute, fading out...
                             it.copy(
                                 isSendingChat = false,
                                 errorMessage = null,
-                                actionBanner = "Sam is Speaking...",
+                                actionBanner = "JARVIS is Speaking...",
                                 state = if (_uiState.value.currentMode == AppMode.VOICE) AssistantState.SPEAKING else AssistantState.IDLE
                             )
                         }
@@ -2705,7 +2731,7 @@ $tempo beats per minute, fading out...
                     it.copy(
                         isSendingChat = false,
                         errorMessage = null,
-                        actionBanner = "Sam is Speaking...",
+                        actionBanner = "JARVIS is Speaking...",
                         state = AssistantState.SPEAKING
                     )
                 }
@@ -2723,7 +2749,7 @@ $tempo beats per minute, fading out...
         _uiState.update {
             it.copy(
                 state = AssistantState.SPEAKING,
-                actionBanner = "Sam is Speaking...",
+                actionBanner = "JARVIS is Speaking...",
                 errorMessage = null
             )
         }
@@ -2891,7 +2917,11 @@ $tempo beats per minute, fading out...
                     }
                 }
             } catch (e: Exception) {
-                Log.e("BargeInMonitor", "Error inside barge-in monitor loop", e)
+                if (e is kotlinx.coroutines.CancellationException) {
+                    Log.d("BargeInMonitor", "Barge-in monitor loop cancelled gracefully.")
+                } else {
+                    Log.e("BargeInMonitor", "Error inside barge-in monitor loop", e)
+                }
             } finally {
                 try {
                     record?.stop()

@@ -75,7 +75,7 @@ fun GeminiAdvancedToolsSheet(
             }
 
             // Divider
-            Divider(color = SamSurfaceBorder, thickness = 1.dp)
+            HorizontalDivider(color = SamSurfaceBorder, thickness = 1.dp)
             Spacer(modifier = Modifier.height(16.dp))
 
             // Section 1: Horizontal Row (Photos, Camera, Avatar, Files)

@@ -18,13 +18,13 @@ class ExampleRobolectricTest {
     fun `read string from context`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val appName = context.getString(R.string.app_name)
-        assertEquals("Sam Ai", appName)
+        assertEquals("JARVIS AI", appName)
     }
 
     @Test
     fun `verify sam personality configuration`() {
-        assertEquals("Sam Ai", SamPersonality.ASSISTANT_NAME)
-        assertEquals("Aoede", SamPersonality.VOICE_NAME)
+        assertEquals("JARVIS", SamPersonality.ASSISTANT_NAME)
+        assertEquals("Fenrir", SamPersonality.VOICE_NAME)
         assertEquals("models/gemini-3.8-flash", SamPersonality.MODEL_LIVE_PRIMARY)
         assertNotNull(SamPersonality.SYSTEM_INSTRUCTION)
     }
@@ -59,7 +59,7 @@ class ExampleRobolectricTest {
             scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main)
         )
         assertNotNull(engine)
-        engine.speak("Hello from Sam AI")
+        engine.speak("Hello from JARVIS")
         engine.stop()
         engine.release()
     }
@@ -157,10 +157,10 @@ class ExampleRobolectricTest {
         val spotter = com.example.audio.LightweightKeywordSpotter()
 
         // 1. Verify WakeWordOption enum mappings
-        val arushiOption = com.example.audio.WakeWordOption.HEY_ARUSHI
-        assertEquals("hey_arushi", arushiOption.key)
-        assertEquals("Hey Arushi", arushiOption.phrase)
-        assertEquals(com.example.audio.WakeWordOption.HEY_ARUSHI, com.example.audio.WakeWordOption.fromKey("hey_arushi"))
+        val jarvisOption = com.example.audio.WakeWordOption.HEY_JARVIS
+        assertEquals("hey_jarvis", jarvisOption.key)
+        assertEquals("Hey Jarvis", jarvisOption.phrase)
+        assertEquals(com.example.audio.WakeWordOption.HEY_JARVIS, com.example.audio.WakeWordOption.fromKey("hey_jarvis"))
         assertEquals(com.example.audio.WakeWordOption.HEY_SAM, com.example.audio.WakeWordOption.fromKey("hey_sam"))
         assertEquals(com.example.audio.WakeWordOption.ANY, com.example.audio.WakeWordOption.fromKey("any"))
 
@@ -182,7 +182,7 @@ class ExampleRobolectricTest {
 
         // 4. Verify rejection of silence / sub-threshold noise
         val silencePcm = ByteArray(16000 * 2) // 1 second of zero bytes
-        val silenceResult = spotter.evaluatePcm(silencePcm, com.example.audio.WakeWordOption.HEY_ARUSHI)
+        val silenceResult = spotter.evaluatePcm(silencePcm, com.example.audio.WakeWordOption.HEY_JARVIS)
         org.junit.Assert.assertFalse("Silence should not trigger wake word", silenceResult.isMatch)
         assertEquals(0.0f, silenceResult.confidence, 0.001f)
 
@@ -192,6 +192,7 @@ class ExampleRobolectricTest {
 
     @Test
     fun `verify human companion persona instructions and conversational rules`() {
+        com.example.gemini.SamPersonality.updatePersona("SAM")
         val instruction = com.example.gemini.SamPersonality.SYSTEM_INSTRUCTION
         org.junit.Assert.assertTrue(
             "Should state Sam is NOT an AI or chatbot",

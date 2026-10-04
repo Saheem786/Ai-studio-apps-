@@ -150,7 +150,7 @@ fun CanvasView(
                     }
                 }
 
-                Divider(color = SamSurfaceBorder, thickness = 1.dp)
+                HorizontalDivider(color = SamSurfaceBorder, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // Content Body (Dark Monospaced Card with line numbers)

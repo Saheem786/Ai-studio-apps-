@@ -224,7 +224,7 @@ fun VoiceEnrollmentDialog(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = "Sam AI voice matching signature calibrated & securely encrypted on-device. Hardware actions will now exclusively execute under your voice signature.",
+                        text = "JARVIS AI voice matching signature calibrated & securely encrypted on-device. Hardware actions will now exclusively execute under your voice signature.",
                         style = MaterialTheme.typography.bodySmall.copy(
                             color = SamTextMuted,
                             textAlign = TextAlign.Center

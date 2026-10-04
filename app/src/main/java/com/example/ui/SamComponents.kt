@@ -160,7 +160,7 @@ fun SamTopBar(
 
             Column {
                 Text(
-                    text = "Sam Ai",
+                    text = "JARVIS",
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 0.5.sp
@@ -263,8 +263,8 @@ fun AssistantStatusBadge(
         AssistantState.IDLE -> Triple("Ready to Talk", SamTextSecondary, SamSurfaceElevated)
         AssistantState.CONNECTING -> Triple("Connecting Live...", SamCyan, SamSurfaceElevated)
         AssistantState.LISTENING -> Triple("Listening to You", SamCyanGlow, Color(0xFF083344))
-        AssistantState.THINKING -> Triple("Sam is Thinking...", SamPurpleSecondary, Color(0xFF2E1065))
-        AssistantState.SPEAKING -> Triple("Sam Speaking", SamMagenta, Color(0xFF4A044E))
+        AssistantState.THINKING -> Triple("JARVIS is Thinking...", SamPurpleSecondary, Color(0xFF2E1065))
+        AssistantState.SPEAKING -> Triple("JARVIS Speaking", SamMagenta, Color(0xFF4A044E))
         AssistantState.ERROR -> Triple("Connection Issue", SamErrorRed, Color(0xFF450A0A))
     }
 
@@ -689,7 +689,7 @@ fun SettingsDialog(
         containerColor = SamSurfaceElevated,
         title = {
             Text(
-                text = "Sam Ai Settings",
+                text = "JARVIS AI Settings",
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontWeight = FontWeight.Bold,
                     color = SamTextPrimary
@@ -1581,7 +1581,7 @@ fun LegacyChatScreenView(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Conversation with Sam",
+                    text = "Conversation with JARVIS",
                     style = MaterialTheme.typography.bodySmall.copy(
                         color = SamTextMuted,
                         fontWeight = FontWeight.Medium
@@ -1709,7 +1709,7 @@ fun LegacyChatScreenView(
                             onValueChange = onInputChanged,
                             placeholder = {
                                 Text(
-                                    text = "Message Sam...",
+                                    text = "Message JARVIS...",
                                     color = SamTextMuted,
                                     style = MaterialTheme.typography.bodyMedium
                                 )
@@ -1784,7 +1784,7 @@ fun LegacyChatScreenView(
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
                                         imageVector = Icons.Default.SmartToy,
-                                        contentDescription = "Sam",
+                                        contentDescription = "JARVIS",
                                         tint = SamCyanGlow,
                                         modifier = Modifier.size(18.dp)
                                     )
@@ -1935,12 +1935,12 @@ fun LegacyChatScreenView(
                             strokeWidth = 2.dp
                         )
                         Text(
-                            text = "Sam is thinking...",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                color = SamTextMuted,
-                                fontSize = 11.sp
+                                text = "JARVIS is thinking...",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    color = SamTextMuted,
+                                    fontSize = 11.sp
+                                )
                             )
-                        )
                     }
                 }
             }
@@ -2060,7 +2060,7 @@ fun VoiceConversationLogsCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "No conversation history yet. Start talking to Sam or ask a question to see real-time persistent logs.",
+                        text = "No conversation history yet. Start talking to JARVIS or ask a question to see real-time persistent logs.",
                         style = MaterialTheme.typography.bodySmall.copy(
                             color = SamTextMuted,
                             fontSize = 11.sp
@@ -2117,7 +2117,7 @@ fun VoiceConversationLogsCard(
                                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
                                             Text(
-                                                text = if (isUser) "You" else "Sam",
+                                                text = if (isUser) "You" else "JARVIS",
                                                 style = MaterialTheme.typography.labelSmall.copy(
                                                     color = if (isUser) SamPurpleSecondary else SamCyan,
                                                     fontWeight = FontWeight.Bold,

@@ -3,19 +3,19 @@ package com.example.gemini
 import com.example.audio.AssistantLanguage
 
 object SamPersonality {
-    const val ASSISTANT_NAME = "Sam Ai"
+    const val ASSISTANT_NAME = "JARVIS"
 
     @Volatile
-    var CURRENT_PERSONA = "SAM"
+    var CURRENT_PERSONA = "JARVIS"
 
     @Volatile
-    var CURRENT_LANGUAGE: AssistantLanguage = AssistantLanguage.HINGLISH
+    var CURRENT_LANGUAGE: AssistantLanguage = AssistantLanguage.ENGLISH_US
 
     @Volatile
-    var SYSTEM_INSTRUCTION = buildInstruction("SAM", AssistantLanguage.HINGLISH)
+    var SYSTEM_INSTRUCTION = buildInstruction("JARVIS", AssistantLanguage.ENGLISH_US)
 
     @Volatile
-    var VOICE_NAME = "Aoede"
+    var VOICE_NAME = "Fenrir"
 
     // Supported Gemini models
     const val MODEL_LIVE_PRIMARY = "models/gemini-3.8-flash"

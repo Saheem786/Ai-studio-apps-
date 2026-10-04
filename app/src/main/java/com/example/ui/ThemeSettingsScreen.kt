@@ -134,7 +134,7 @@ fun ThemeSettingsScreen(
                 modifier = Modifier.align(Alignment.Start)
             )
             Text(
-                text = "Select a Dynamic Color Scheme for the Sam AI visualizer, glowing buttons, chat interfaces, and diagnostics panel.",
+                text = "Select a Dynamic Color Scheme for the JARVIS visualizer, glowing buttons, chat interfaces, and diagnostics panel.",
                 style = MaterialTheme.typography.bodySmall.copy(
                     color = SamTextSecondary,
                     lineHeight = 18.sp

@@ -9,16 +9,18 @@ import kotlin.math.sqrt
  * Supported Wake Word options for always-on keyword spotter.
  */
 enum class WakeWordOption(val key: String, val phrase: String, val displayName: String) {
-    HEY_ARUSHI("hey_arushi", "Hey Arushi", "Hey Arushi (Default)"),
+    HEY_JARVIS("hey_jarvis", "Hey Jarvis", "Hey Jarvis (Recommended)"),
+    HEY_ARUSHI("hey_arushi", "Hey Arushi", "Hey Arushi"),
     HEY_SAM("hey_sam", "Hey Sam", "Hey Sam"),
-    ANY("any", "Hey Arushi / Hey Sam", "Any (Arushi or Sam)");
+    ANY("any", "Hey Jarvis / Hey Sam", "Any (Jarvis or Sam)");
 
     companion object {
         fun fromKey(key: String?): WakeWordOption {
             return when (key?.lowercase()?.trim()) {
                 "hey_sam", "sam" -> HEY_SAM
+                "hey_arushi", "arushi" -> HEY_ARUSHI
                 "any", "both" -> ANY
-                else -> HEY_ARUSHI
+                else -> HEY_JARVIS
             }
         }
     }
@@ -36,13 +38,13 @@ data class KeywordSpotterResult(
 
 /**
  * Lightweight, on-device acoustic keyword spotter for hands-free wake word detection
- * (e.g., 'Hey Arushi', 'Hey Sam').
+ * (e.g., 'Hey Jarvis', 'Hey Sam').
  *
  * Designed for low power consumption, zero cloud latency, and 100% offline execution.
  * Operates on 16kHz 16-bit Mono PCM audio.
  */
 class LightweightKeywordSpotter(
-    private var defaultOption: WakeWordOption = WakeWordOption.HEY_ARUSHI,
+    private var defaultOption: WakeWordOption = WakeWordOption.HEY_JARVIS,
     private var sensitivity: Float = 0.60f // Lower value = higher sensitivity
 ) {
 
@@ -112,17 +114,18 @@ class LightweightKeywordSpotter(
         }
 
         return when (targetOption) {
+            WakeWordOption.HEY_JARVIS -> scoreJarvisSequence(frames, threshold)
             WakeWordOption.HEY_ARUSHI -> scoreArushiSequence(frames, threshold)
             WakeWordOption.HEY_SAM -> scoreSamSequence(frames, threshold)
             WakeWordOption.ANY -> {
-                val arushiRes = scoreArushiSequence(frames, threshold)
+                val jarvisRes = scoreJarvisSequence(frames, threshold)
                 val samRes = scoreSamSequence(frames, threshold)
-                if (arushiRes.confidence >= samRes.confidence && arushiRes.isMatch) {
-                    arushiRes
+                if (jarvisRes.confidence >= samRes.confidence && jarvisRes.isMatch) {
+                    jarvisRes
                 } else if (samRes.isMatch) {
                     samRes
-                } else if (arushiRes.confidence >= samRes.confidence) {
-                    arushiRes
+                } else if (jarvisRes.confidence >= samRes.confidence) {
+                    jarvisRes
                 } else {
                     samRes
                 }
@@ -299,6 +302,55 @@ class LightweightKeywordSpotter(
             detectedKeyword = "Hey Sam",
             confidence = confidence,
             details = "Sam Cadence: sibilant=$hasSibilantOnset, nasalDecay=$hasVowelNasalDecay, peakZcr=$peakZcr"
+        )
+    }
+
+    /**
+     * Spots "Hey Jarvis" / "Jarvis":
+     * Phonetics:
+     * 1. [J] (Affricate, moderate ZCR 0.07 - 0.13, low-mid energy)
+     * 2. [ar] (Vowel-rhotic transition, low ZCR < 0.07, high energy)
+     * 3. [vis] (Sibilant/fricative tail, high ZCR > 0.13)
+     */
+    private fun scoreJarvisSequence(frames: List<AcousticFrame>, threshold: Float): KeywordSpotterResult {
+        var hasAffricateOnset = false
+        var hasVowelCore = false
+        var hasSibilantTail = false
+        var peakZcr = 0f
+
+        for (i in frames.indices) {
+            val f = frames[i]
+
+            // Affricate onset check ([J])
+            if (!hasAffricateOnset && f.zeroCrossingRate in 0.07f..0.13f && f.rmsEnergy > 0.012f) {
+                hasAffricateOnset = true
+            }
+
+            // Vowel core check ([ar])
+            if (hasAffricateOnset && f.zeroCrossingRate < 0.07f && f.rmsEnergy > 0.018f) {
+                hasVowelCore = true
+            }
+
+            // Sibilant tail check ([vis])
+            if (hasVowelCore && f.zeroCrossingRate > 0.13f && f.rmsEnergy > 0.012f) {
+                hasSibilantTail = true
+                if (f.zeroCrossingRate > peakZcr) peakZcr = f.zeroCrossingRate
+            }
+        }
+
+        var confidence = 0.0f
+        if (hasAffricateOnset) confidence += 0.35f
+        if (hasVowelCore) confidence += 0.35f
+        if (hasSibilantTail) confidence += 0.30f
+
+        confidence = confidence.coerceIn(0.0f, 1.0f)
+        val isMatch = confidence >= threshold && hasVowelCore && hasSibilantTail
+
+        return KeywordSpotterResult(
+            isMatch = isMatch,
+            detectedKeyword = "Hey Jarvis",
+            confidence = confidence,
+            details = "Jarvis Cadence: onset=$hasAffricateOnset, vowel=$hasVowelCore, tail=$hasSibilantTail, peakZcr=$peakZcr"
         )
     }
 

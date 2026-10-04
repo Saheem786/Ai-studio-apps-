@@ -831,7 +831,20 @@ class GeminiLiveService(
         }
 
         try {
-            val respString = response.body?.string() ?: ""
+            val respString = try {
+                response.body?.string() ?: ""
+            } catch (e: Exception) {
+                ""
+            }
+
+            if (respString.isBlank()) {
+                val isStreamingMode = (engineMode == AiEngineMode.QUICK && onChunkAvailable != null && !isDeepResearch && base64Image.isNullOrEmpty())
+                if (isStreamingMode) {
+                    return@withContext Pair("", null)
+                }
+                return@withContext Pair("Yaar, server response blank ya closed mila.", null)
+            }
+
             val jsonResp = JSONObject(respString)
             val candidates = jsonResp.optJSONArray("candidates")
             val candidate = candidates?.optJSONObject(0)

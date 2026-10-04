@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "Sam Ai"
+rootProject.name = "JARVIS AI"
 
 include(":app")
